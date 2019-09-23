@@ -7,15 +7,15 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn write(&mut self, address: u16, data: u8) {
+    pub fn write(&self, address: u16, data: u8) {
         if(address >= 0x0000u16 && address < 0xFFFFu16) {
-            self.ram[address as usize] = data
+            self.ram.borrow_mut()[address as usize] = data
         }
     }
 
     pub fn read(&self, address: u16, read_only: bool) -> u8 {
         if(address >= 0x0000u16 && address < 0xFFFFu16) {
-            return self.ram[address as usize]
+            return self.ram.borrow()[address as usize]
         } else {
             return 0x00u8;
         }

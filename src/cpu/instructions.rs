@@ -276,50 +276,50 @@ fn XXX(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
 }
 
 fn JMP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
-    bus.cpu.pc = R6502::address(bus, addressing_mode);
+    bus.cpu.borrow_mut().pc = R6502::address(bus, addressing_mode);
     return 0;
 }
 
 // Branch on carry set
 fn BCS(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
-    if CpuStateFlags::contains(&mut bus.cpu.flags, CpuStateFlags::C) {
-        bus.cpu.rem_cycles += 1;
+    if CpuStateFlags::contains(&mut bus.cpu.borrow().flags, CpuStateFlags::C) {
+        bus.cpu.borrow_mut().rem_cycles += 1;
 
         let offset = match addressing_mode(bus) {
             AddressingResult::Relative { address_rel } => address_rel,
             _ => panic!("No")
         };
 
-        let address_abs = bus.cpu.pc.wrapping_add(offset);
+        let address_abs = bus.cpu.borrow_mut().pc.wrapping_add(offset);
 
         // Page cross penalty
-        if (address_abs & 0xFF00u16) != (bus.cpu.pc & 0xFF00u16) {
-            bus.cpu.rem_cycles += 1;
+        if (address_abs & 0xFF00u16) != (bus.cpu.borrow().pc & 0xFF00u16) {
+            bus.cpu.borrow_mut().rem_cycles += 1;
         }
 
-        bus.cpu.pc = address_abs;
+        bus.cpu.borrow_mut().pc = address_abs;
     }
     return 0;
 }
 
 // Branch on carry clear
 fn BCC(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
-    if !CpuStateFlags::contains(&mut bus.cpu.flags, CpuStateFlags::C) {
-        bus.cpu.rem_cycles += 1;
+    if !CpuStateFlags::contains(&mut bus.cpu.borrow().flags, CpuStateFlags::C) {
+        bus.cpu.borrow_mut().rem_cycles += 1;
 
         let offset = match addressing_mode(bus) {
             AddressingResult::Relative { address_rel } => address_rel,
             _ => panic!("No")
         };
 
-        let address_abs = bus.cpu.pc.wrapping_add(offset);
+        let address_abs = bus.cpu.borrow().pc.wrapping_add(offset);
 
         // Page cross penalty
-        if (address_abs & 0xFF00u16) != (bus.cpu.pc & 0xFF00u16) {
-            bus.cpu.rem_cycles += 1;
+        if (address_abs & 0xFF00u16) != (bus.cpu.borrow().pc & 0xFF00u16) {
+            bus.cpu.borrow_mut().rem_cycles += 1;
         }
 
-        bus.cpu.pc = address_abs;
+        bus.cpu.borrow_mut().pc = address_abs;
     }
     return 0;
 }
@@ -334,14 +334,14 @@ fn BEQ(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
             _ => panic!("No")
         };
 
-        let address_abs = bus.cpu.pc.wrapping_add(offset);
+        let address_abs = bus.cpu.borrow().pc.wrapping_add(offset);
 
         // Page cross penalty
-        if (address_abs & 0xFF00u16) != (bus.cpu.pc & 0xFF00u16) {
-            bus.cpu.rem_cycles += 1;
+        if (address_abs & 0xFF00u16) != (bus.cpu.borrow().pc & 0xFF00u16) {
+            bus.cpu.borrow_mut().rem_cycles += 1;
         }
 
-        bus.cpu.pc = address_abs;
+        bus.cpu.borrow_mut().pc = address_abs;
     }
     return 0;
 }
