@@ -1,6 +1,6 @@
 use crate::bus::Bus;
 use crate::cpu::instructions::*;
-use crate::cpu::addressing_modes::{AddressingResult, AddressingMode};
+use crate::cpu::addressing_modes::{AddressingResult, AddressingModeImplementation};
 use std::borrow::BorrowMut;
 
 mod addressing_modes;
@@ -30,8 +30,6 @@ bitflags! {
         const U = 0b00100000; // Unused
         const V = 0b01000000; // Overflow
         const N = 0b10000000; // Negative
-
-        //const Init = 0x00_u8 | 0b00100000; // Initial state at reset
     }
 }
 
@@ -58,10 +56,10 @@ impl Cpu {
             let instruction = &INSTRUCTIONS[opcode as usize];
             cpu.rem_cycles = instruction.cycles;
 
-            let iw = instruction.work;
+            let iw = instruction.implementation;
 
             println!("Executing {} (code={})", instruction.name, opcode);
-            iw(cpu, bus, instruction.addressing);
+            iw(cpu, bus, instruction.addressing.implementation);
 
             println!("{:?}", cpu)
         }
@@ -133,7 +131,7 @@ impl Cpu {
         cpu.rem_cycles = 8;
     }
 
-    pub fn fetch(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u8 {
+    pub fn fetch(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingModeImplementation) -> u8 {
         //let addressing_mode = instruction.addressing;
         let what_to_fetch = addressing_mode(cpu, bus);
         match what_to_fetch {
@@ -149,7 +147,7 @@ impl Cpu {
         }
     }
 
-    pub fn address_rel(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+    pub fn address_rel(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingModeImplementation) -> u16 {
         let where_to_fetch = addressing_mode(cpu, bus);
         match where_to_fetch {
             AddressingResult::ProgramCounterRelative { address_rel } => {
@@ -162,7 +160,7 @@ impl Cpu {
         }
     }
 
-    pub fn address(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+    pub fn address(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingModeImplementation) -> u16 {
         let where_to_fetch = addressing_mode(cpu, bus);
         match where_to_fetch {
             AddressingResult::ReadFrom { address, cycles } => {
