@@ -3,12 +3,12 @@ use crate::bus::Bus;
 
 pub struct AddressingMode {
     pub name: &'static str,
-    pub implementation: AddressingModeImplementation,
+    implementation: AddressingModeImplementation,
 }
 
 /// Executes the operations necessary to fetch data and returns a struct describing
 /// the remainder work left to the instruction
-pub type AddressingModeImplementation = fn(&mut Cpu, &Bus) -> AddressingResult;
+type AddressingModeImplementation = fn(&mut Cpu, &Bus) -> AddressingResult;
 
 pub const ADDRESSING_MODES: [AddressingMode; 12] = [
     AddressingMode { name: "IMP", implementation: am_implied },
@@ -40,7 +40,7 @@ pub const IND: &'static AddressingMode = &ADDRESSING_MODES[9];
 pub const IZX: &'static AddressingMode = &ADDRESSING_MODES[10];
 pub const IZY: &'static AddressingMode = &ADDRESSING_MODES[11];
 
-pub enum AddressingResult {
+enum AddressingResult {
     Implicit {
         data: u8
     },
