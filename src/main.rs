@@ -9,5 +9,20 @@ mod bus;
 
 fn main() {
     let nes = Bus::new();
-    println!("Hello, world!");
+
+    let mut a = 9;
+    t(&mut a);
+
+    print!("{}", a)
+}
+
+fn t(r: &mut i32) {
+    *r *= 2;
+    z(r);
+    *r /= 2;
+}
+
+
+fn z(r: &mut i32) {
+    *r += 1;
 }

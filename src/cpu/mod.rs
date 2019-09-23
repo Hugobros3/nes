@@ -31,6 +31,7 @@ mod instructions;
 
 use crate::cpu::instructions::*;
 use crate::cpu::addressing_modes::{AddressingResult, AddressingMode};
+use std::borrow::BorrowMut;
 
 impl R6502 {
     pub(crate) fn new() -> Self {
@@ -47,82 +48,88 @@ impl R6502 {
     }
 
     fn clock(bus: &Bus) {
-        if (bus.cpu.borrow().rem_cycles == 0) {
-            let opcode = bus.read(bus.cpu.borrow().pc, false);
-            bus.cpu.borrow_mut().pc += 1;
+        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+        if (cpu.rem_cycles == 0) {
+            let opcode = bus.read(cpu.pc, false);
+            cpu.pc += 1;
 
             let instruction = &INSTRUCTIONS[opcode as usize];
-            bus.cpu.borrow_mut().rem_cycles = instruction.cycles;
+            cpu.rem_cycles = instruction.cycles;
 
-            //TODO cycles
+            let iw = instruction.work;
+            iw(cpu, bus, instruction.addressing);
         }
 
-        bus.cpu.borrow_mut().rem_cycles -= 1;
+        cpu.rem_cycles -= 1;
     }
 
     fn reset(bus: &Bus) {
-        bus.cpu.borrow_mut().a = 0;
-        bus.cpu.borrow_mut().x = 0;
-        bus.cpu.borrow_mut().y = 0;
+        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+        cpu.a = 0;
+        cpu.x = 0;
+        cpu.y = 0;
 
-        bus.cpu.borrow_mut().sp = 0xFD;
-        bus.cpu.borrow_mut().flags = CpuStateFlags::Init;
+        cpu.sp = 0xFD;
+        cpu.flags = CpuStateFlags::Init;
 
         let reset_vector = 0xFFFCu16;
         let lo = bus.read(reset_vector, false) as u16;
         let hi = bus.read(reset_vector + 1, false) as u16;
 
-        bus.cpu.borrow_mut().pc = (hi << 8) | lo;
-        bus.cpu.borrow_mut().rem_cycles = 8;
+        cpu.pc = (hi << 8) | lo;
+        cpu.rem_cycles = 8;
     }
 
     fn irq(bus: &Bus) {
-        if !CpuStateFlags::contains(&mut bus.cpu.borrow().flags, CpuStateFlags::I) {
-            bus.write(0x0100 + bus.cpu.borrow().sp as u16, (bus.cpu.borrow().pc >> 8) as u8);
-            bus.cpu.borrow_mut().sp -= 1;
-            bus.write(0x0100 + bus.cpu.borrow().sp as u16, (bus.cpu.borrow().pc & 0x00FFu16) as u8);
-            bus.cpu.borrow_mut().sp -= 1;
+        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
 
-            CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::B, false);
-            CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::U, true);
-            CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::I, true);
-            bus.write(0x0100 + bus.cpu.borrow().sp as u16, bus.cpu.borrow().flags.bits);
-            bus.cpu.borrow_mut().sp -= 1;
+        if !CpuStateFlags::contains(&mut cpu.flags, CpuStateFlags::I) {
+            bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+            cpu.sp -= 1;
+            bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+            cpu.sp -= 1;
+
+            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
+            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
+            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
+            bus.write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+            cpu.sp -= 1;
 
             let interrupt_vector = 0xFFFEu16;
             let lo = bus.read(interrupt_vector, false) as u16;
             let hi = bus.read(interrupt_vector + 1, false) as u16;
 
-            bus.cpu.borrow_mut().pc = (hi << 8) | lo;
+            cpu.pc = (hi << 8) | lo;
 
-            bus.cpu.borrow_mut().rem_cycles = 7;
+            cpu.rem_cycles = 7;
         }
     }
 
     fn nmi(bus: &mut Bus) {
-        bus.write(0x0100 + bus.cpu.borrow().sp as u16, (bus.cpu.borrow().pc >> 8) as u8);
-        bus.cpu.borrow_mut().sp -= 1;
-        bus.write(0x0100 + bus.cpu.borrow().sp as u16, (bus.cpu.borrow().pc & 0x00FFu16) as u8);
-        bus.cpu.borrow_mut().sp -= 1;
+        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+        bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+        cpu.sp -= 1;
+        bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+        cpu.sp -= 1;
 
-        CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::B, false);
-        CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::U, true);
-        CpuStateFlags::set(&mut bus.cpu.borrow_mut().flags, CpuStateFlags::I, true);
-        bus.write(0x0100 + bus.cpu.borrow().sp as u16, bus.cpu.borrow().flags.bits);
-        bus.cpu.borrow_mut().sp -= 1;
+        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
+        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
+        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
+        bus.write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+        cpu.sp -= 1;
 
         let interrupt_vector = 0xFFFAu16;
         let lo = bus.read(interrupt_vector, false) as u16;
         let hi = bus.read(interrupt_vector + 1, false) as u16;
 
-        bus.cpu.borrow_mut().pc = (hi << 8) | lo;
+        cpu.pc = (hi << 8) | lo;
 
-        bus.cpu.borrow_mut().rem_cycles = 8;
+        cpu.rem_cycles = 8;
     }
 
-    pub fn fetch(bus: &Bus, addressing_mode: AddressingMode) -> u8 {
+    pub fn fetch(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u8 {
         //let addressing_mode = instruction.addressing;
-        let what_to_fetch = addressing_mode(bus);
+        let what_to_fetch = addressing_mode(cpu, bus);
         match what_to_fetch {
             AddressingResult::Implicit { data } => {
                 return data;
@@ -136,18 +143,27 @@ impl R6502 {
         }
     }
 
-    pub fn address(bus: &Bus, addressing_mode: AddressingMode) -> u16 {
-        let where_to_fetch = addressing_mode(bus);
+    pub fn address_rel(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+        let where_to_fetch = addressing_mode(cpu, bus);
         match where_to_fetch {
-            AddressingResult::Implicit { data } => {
-                panic!("i dunno lol")
-            },
+            AddressingResult::ProgramCounterRelative { address_rel } => {
+                let t = cpu.pc.wrapping_add(address_rel);
+                return t;
+            }
+            _ => {
+                panic!("Expected a (PC) relative address")
+            }
+        }
+    }
+
+    pub fn address(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+        let where_to_fetch = addressing_mode(cpu, bus);
+        match where_to_fetch {
             AddressingResult::ReadFrom { address, cycles } => {
                 return address;
             },
-            AddressingResult::Relative { address_rel } => {
-                let t = bus.cpu.borrow().pc.wrapping_add(address_rel);
-                return t;
+            _ => {
+                panic!("Expected an absolute address")
             }
         }
     }
