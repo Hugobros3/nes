@@ -197,3 +197,73 @@ fn am_relative(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
     return AddressingResult::ProgramCounterRelative {address_rel: address_rel}
 }
+
+impl AddressingMode {
+    // Will fetch data - Cannot be called for relative addressing
+    pub fn fetch(&self, cpu: &mut Cpu, bus: &Bus) -> u8 {
+        let am_implementation = self.implementation;
+        let what_to_fetch = am_implementation(cpu, bus);
+        match what_to_fetch {
+            AddressingResult::Implicit { data } => {
+                return data;
+            }
+            AddressingResult::ReadFrom { address, cycles } => {
+                return bus.read(address, false);
+            },
+            _ => {
+                panic!("lol")
+            }
+        }
+    }
+
+    /// Returns relative addressing offset - Can only be called for relative addressing
+    pub fn offset_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
+        let am_implementation = self.implementation;
+        let where_to_fetch = am_implementation(cpu, bus);
+        match where_to_fetch {
+            AddressingResult::ProgramCounterRelative { address_rel } => {
+                return address_rel;
+            }
+            _ => {
+                panic!("Expected a (PC) relative address")
+            }
+        }
+    }
+
+    /// Will compute relative address - Can only be called for relative addressing
+    pub fn address_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
+        let am_implementation = self.implementation;
+        let where_to_fetch = am_implementation(cpu, bus);
+        match where_to_fetch {
+            AddressingResult::ProgramCounterRelative { address_rel } => {
+                let t = cpu.pc.wrapping_add(address_rel);
+                return t;
+            }
+            _ => {
+                panic!("Expected a (PC) relative address")
+            }
+        }
+    }
+
+    /// Will compute absolute address - Can only be called for non-immediate, non-REL addressing modes
+    pub fn address(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
+        let am_implementation = self.implementation;
+        let where_to_fetch = am_implementation(cpu, bus);
+        match where_to_fetch {
+            AddressingResult::ReadFrom { address, cycles } => {
+                return address;
+            },
+            _ => {
+                panic!("Expected an absolute address")
+            }
+        }
+    }
+}
+
+impl PartialEq for AddressingMode {
+    fn eq(self: &AddressingMode, b: &AddressingMode) -> bool {
+        return self.name == b.name;
+    }
+}
+
+impl Eq for AddressingMode {}
