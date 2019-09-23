@@ -10,6 +10,8 @@ use crate::cpu::Cpu;
 
 mod cpu;
 mod bus;
+mod ppu;
+mod cartdrige;
 
 fn main() {
     let nes = Bus::new();
@@ -22,11 +24,11 @@ fn main() {
 
     let base_address = 0x8000u16;
     for (i, x) in mapped.enumerate() {
-        nes.ram.borrow_mut()[(base_address + i as u16) as usize] = x;
+        nes.cpu_write(base_address + i as u16, x);
     }
 
-    nes.ram.borrow_mut()[0xFFFC] = 0x00u8;
-    nes.ram.borrow_mut()[0xFFFD] = 0x80u8;
+    nes.cpu_write(0xFFFC, 0x00u8);
+    nes.cpu_write(0xFFFD, 0x00u8);
 
     Cpu::reset(&nes);
 

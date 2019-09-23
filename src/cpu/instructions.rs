@@ -514,7 +514,7 @@ fn SBC(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 
 // Push A to stack
 fn PHA(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    bus.write(0x0100u16 + cpu.sp as u16, cpu.a);
+    bus.cpu_write(0x0100u16 + cpu.sp as u16, cpu.a);
     cpu.sp -= 1;
     return 0;
 }
@@ -522,7 +522,7 @@ fn PHA(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 // Pop A from stack
 fn PLA(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     cpu.sp += 1;
-    cpu.a = bus.read(0x0100u16 + cpu.sp as u16, false);
+    cpu.a = bus.cpu_read(0x0100u16 + cpu.sp as u16, false);
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, cpu.a == 0x00u8);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, cpu.a & 0x80u8 != 0);
@@ -532,7 +532,7 @@ fn PLA(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 
 // Push status register to stack
 fn PHP(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    bus.write(0x0100u16 + cpu.sp as u16, cpu.flags.bits | CpuStateFlags::B.bits | CpuStateFlags::U.bits);
+    bus.cpu_write(0x0100u16 + cpu.sp as u16, cpu.flags.bits | CpuStateFlags::B.bits | CpuStateFlags::U.bits);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, false);
     cpu.sp -= 1;
@@ -542,7 +542,7 @@ fn PHP(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 // Pop status register from stack
 fn PLP(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     cpu.sp += 1;
-    cpu.flags.bits = bus.read(0x0100u16 + cpu.sp as u16, false);
+    cpu.flags.bits = bus.cpu_read(0x0100u16 + cpu.sp as u16, false);
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
 
@@ -555,21 +555,21 @@ fn BRK(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
     // Push PC
-    bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+    bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
     cpu.sp -= 1;
-    bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+    bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
     cpu.sp -= 1;
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, true);
     // Push SP
-    bus.write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+    bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.bits);
     cpu.sp -= 1;
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
 
     // Read PC from interrupt vector
     let interrupt_vector = 0xFFFEu16;
-    let lo = bus.read(interrupt_vector, false) as u16;
-    let hi = bus.read(interrupt_vector + 1, false) as u16;
+    let lo = bus.cpu_read(interrupt_vector, false) as u16;
+    let hi = bus.cpu_read(interrupt_vector + 1, false) as u16;
 
     cpu.pc = (hi << 8) | lo;
     return 0;
@@ -578,15 +578,15 @@ fn BRK(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 // Return from interrupt
 fn RTI(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     cpu.sp += 1;
-    cpu.flags.bits = bus.read(0x0100u16 + cpu.sp as u16, false);
+    cpu.flags.bits = bus.cpu_read(0x0100u16 + cpu.sp as u16, false);
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, false);
 
     cpu.sp += 1;
-    let pc_lo = bus.read(0x0100u16 + cpu.sp as u16, false) as u16;
+    let pc_lo = bus.cpu_read(0x0100u16 + cpu.sp as u16, false) as u16;
     cpu.sp += 1;
-    let pc_hi = bus.read(0x0100u16 + cpu.sp as u16, false) as u16;
+    let pc_hi = bus.cpu_read(0x0100u16 + cpu.sp as u16, false) as u16;
 
     cpu.pc = (pc_hi << 8) | pc_lo;
     return 0;
@@ -596,9 +596,9 @@ fn JSR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     cpu.sp = cpu.sp.wrapping_sub(1);
 
     // Push PC
-    bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+    bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
     cpu.sp -= 1;
-    bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+    bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
     cpu.sp -= 1;
 
     cpu.pc = instruction.addressing.address_rel(cpu, bus);
@@ -608,9 +608,9 @@ fn JSR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 // Return from subroutine
 fn RTS(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     cpu.sp += 1;
-    let pc_lo = bus.read(0x0100u16 + cpu.sp as u16, false) as u16;
+    let pc_lo = bus.cpu_read(0x0100u16 + cpu.sp as u16, false) as u16;
     cpu.sp += 1;
-    let pc_hi = bus.read(0x0100u16 + cpu.sp as u16, false) as u16;
+    let pc_hi = bus.cpu_read(0x0100u16 + cpu.sp as u16, false) as u16;
 
     cpu.pc = (pc_hi << 8) | pc_lo;
     cpu.pc += 1;
@@ -619,19 +619,19 @@ fn RTS(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 
 // Stores A
 fn STA(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    bus.write(instruction.addressing.address(cpu, bus), cpu.a);
+    bus.cpu_write(instruction.addressing.address(cpu, bus), cpu.a);
     return 0;
 }
 
 // Stores X
 fn STX(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    bus.write(instruction.addressing.address(cpu, bus), cpu.x);
+    bus.cpu_write(instruction.addressing.address(cpu, bus), cpu.x);
     return 0;
 }
 
 // Stores Y
 fn STY(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    bus.write(instruction.addressing.address(cpu, bus), cpu.y);
+    bus.cpu_write(instruction.addressing.address(cpu, bus), cpu.y);
     return 0;
 }
 
@@ -758,7 +758,7 @@ fn ROL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
-        bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
+        bus.cpu_write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
     }
 
     return 0;
@@ -777,7 +777,7 @@ fn ROR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
-        bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
+        bus.cpu_write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
     }
 
     return 0;
@@ -795,7 +795,7 @@ fn ASL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
-        bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
+        bus.cpu_write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
     }
 
     return 0;
@@ -814,7 +814,7 @@ fn LSR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
-        bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
+        bus.cpu_write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
     }
 
     return 0;
@@ -868,7 +868,7 @@ fn CPY(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 fn DEC(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     let fetched = instruction.addressing.fetch(cpu, bus);
     let temp = fetched.wrapping_sub(1u8);
-    bus.write(instruction.addressing.address(cpu, bus), temp);
+    bus.cpu_write(instruction.addressing.address(cpu, bus), temp);
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (cpu.x & 0xFFu8) == 0x00u8);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (cpu.x & 0x80u8) != 0);
@@ -895,7 +895,7 @@ fn DEY(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
 fn INC(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     let fetched = instruction.addressing.fetch(cpu, bus);
     let temp = fetched.wrapping_add(1u8);
-    bus.write(instruction.addressing.address(cpu, bus), temp);
+    bus.cpu_write(instruction.addressing.address(cpu, bus), temp);
 
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (cpu.x & 0xFFu8) == 0x00u8);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (cpu.x & 0x80u8) != 0);

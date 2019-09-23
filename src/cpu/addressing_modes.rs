@@ -64,14 +64,14 @@ fn am_immediate(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 }
 
 fn am_zero_page(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut address = bus.read(cpu.pc, false) as u16;
+    let mut address = bus.cpu_read(cpu.pc, false) as u16;
     address &= 0x00FFu16;
     cpu.pc+=1;
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
 fn am_zero_page_x_offset(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut address = bus.read(cpu.pc, false) as u16;
+    let mut address = bus.cpu_read(cpu.pc, false) as u16;
     address += cpu.x as u16;
     address &= 0x00FFu16;
     cpu.pc+=1;
@@ -79,7 +79,7 @@ fn am_zero_page_x_offset(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 }
 
 fn am_zero_page_y_offset(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut address = bus.read(cpu.pc, false) as u16;
+    let mut address = bus.cpu_read(cpu.pc, false) as u16;
     address += cpu.y as u16;
     address &= 0x00FFu16;
     cpu.pc+=1;
@@ -87,18 +87,18 @@ fn am_zero_page_y_offset(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 }
 
 fn am_absolute(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let low = bus.read(cpu.pc, false);
+    let low = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
-    let hi = bus.read(cpu.pc, false);
+    let hi = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
     let address = ((hi as u16) << 8) | (low as u16);
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
 fn am_absolute_x(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let low = bus.read(cpu.pc, false);
+    let low = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
-    let hi = bus.read(cpu.pc, false);
+    let hi = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
 
     let address = ((hi as u16) << 8) | (low as u16);
@@ -113,9 +113,9 @@ fn am_absolute_x(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 }
 
 fn am_absolute_y(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let low = bus.read(cpu.pc, false);
+    let low = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
-    let hi = bus.read(cpu.pc, false);
+    let hi = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
 
     let address = ((hi as u16) << 8) | (low as u16);
@@ -131,19 +131,19 @@ fn am_absolute_y(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
 /// Fetches a pointer then fetches the address from there
 fn am_indirect(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let ptr_low = bus.read(cpu.pc, false);
+    let ptr_low = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
-    let ptr_hi = bus.read(cpu.pc, false);
+    let ptr_hi = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
 
     let ptr = ((ptr_hi as u16) << 8) | (ptr_low as u16);
 
-    let address_lo = bus.read(ptr, false);
+    let address_lo = bus.cpu_read(ptr, false);
 
     let address_hi = if(ptr_low == 0xFFu8) {
-         bus.read((ptr & 0xFF00), false)
+         bus.cpu_read((ptr & 0xFF00), false)
     } else {
-        bus.read(ptr + 1, false)
+        bus.cpu_read(ptr + 1, false)
     };
 
     let address = ((address_hi as u16) << 8) | (address_lo as u16);
@@ -153,13 +153,13 @@ fn am_indirect(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
 /// Fetches a pointer, adds x to it, fetches the address from the result
 fn am_indexed_indirect(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut ptr = bus.read(cpu.pc, false) as u16;
+    let mut ptr = bus.cpu_read(cpu.pc, false) as u16;
     cpu.pc+=1;
 
     ptr += cpu.x as u16;
 
-    let address_lo = bus.read(ptr & 0x00FF, false);
-    let address_hi = bus.read((ptr + 1) & 0x00FF, false);
+    let address_lo = bus.cpu_read(ptr & 0x00FF, false);
+    let address_hi = bus.cpu_read((ptr + 1) & 0x00FF, false);
 
     let address = ((address_hi as u16) << 8) | (address_lo as u16);
 
@@ -168,11 +168,11 @@ fn am_indexed_indirect(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
 /// Fetches a pointer, fetches the address from it, *then* adds y to it.
 fn am_indirect_indexed(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut ptr = bus.read(cpu.pc, false) as u16;
+    let mut ptr = bus.cpu_read(cpu.pc, false) as u16;
     cpu.pc+=1;
 
-    let address_lo = bus.read(ptr & 0x00FF, false);
-    let address_hi = bus.read((ptr + 1) & 0x00FF, false);
+    let address_lo = bus.cpu_read(ptr & 0x00FF, false);
+    let address_hi = bus.cpu_read((ptr + 1) & 0x00FF, false);
 
     let address = ((address_hi as u16) << 8) | (address_lo as u16);
     let offseted_address = address + cpu.y as u16;
@@ -187,7 +187,7 @@ fn am_indirect_indexed(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
 /// Fetches relative to the program counter (USED BY BRANCHING INSTRUCTIONS ONLY)
 fn am_relative(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut address_rel = bus.read(cpu.pc, false) as u16;
+    let mut address_rel = bus.cpu_read(cpu.pc, false) as u16;
     cpu.pc += 1;
 
     // Extend sign
@@ -208,7 +208,7 @@ impl AddressingMode {
                 return data;
             }
             AddressingResult::ReadFrom { address, cycles } => {
-                return bus.read(address, false);
+                return bus.cpu_read(address, false);
             },
             _ => {
                 panic!("lol")

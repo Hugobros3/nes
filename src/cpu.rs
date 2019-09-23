@@ -49,7 +49,7 @@ impl Cpu {
     pub fn clock(bus: &Bus) {
         let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
         if (cpu.rem_cycles == 0) {
-            let opcode = bus.read(cpu.pc, false);
+            let opcode = bus.cpu_read(cpu.pc, false);
             cpu.pc += 1;
 
             let instruction = &INSTRUCTIONS[opcode as usize];
@@ -76,8 +76,8 @@ impl Cpu {
         cpu.flags = CpuStateFlags::U;
 
         let reset_vector = 0xFFFCu16;
-        let lo = bus.read(reset_vector, false) as u16;
-        let hi = bus.read(reset_vector + 1, false) as u16;
+        let lo = bus.cpu_read(reset_vector, false) as u16;
+        let hi = bus.cpu_read(reset_vector + 1, false) as u16;
 
         cpu.pc = (hi << 8) | lo;
         cpu.rem_cycles = 8;
@@ -87,20 +87,20 @@ impl Cpu {
         let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
 
         if !CpuStateFlags::contains(&mut cpu.flags, CpuStateFlags::I) {
-            bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+            bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
             cpu.sp -= 1;
-            bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+            bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
             cpu.sp -= 1;
 
             CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
             CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
             CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
-            bus.write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+            bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.bits);
             cpu.sp -= 1;
 
             let interrupt_vector = 0xFFFEu16;
-            let lo = bus.read(interrupt_vector, false) as u16;
-            let hi = bus.read(interrupt_vector + 1, false) as u16;
+            let lo = bus.cpu_read(interrupt_vector, false) as u16;
+            let hi = bus.cpu_read(interrupt_vector + 1, false) as u16;
 
             cpu.pc = (hi << 8) | lo;
 
@@ -110,20 +110,20 @@ impl Cpu {
 
     fn nmi(bus: &mut Bus) {
         let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
-        bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
+        bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
         cpu.sp -= 1;
-        bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
+        bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
         cpu.sp -= 1;
 
         CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
         CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
         CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
-        bus.write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+        bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.bits);
         cpu.sp -= 1;
 
         let interrupt_vector = 0xFFFAu16;
-        let lo = bus.read(interrupt_vector, false) as u16;
-        let hi = bus.read(interrupt_vector + 1, false) as u16;
+        let lo = bus.cpu_read(interrupt_vector, false) as u16;
+        let hi = bus.cpu_read(interrupt_vector + 1, false) as u16;
 
         cpu.pc = (hi << 8) | lo;
 
