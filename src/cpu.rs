@@ -1,6 +1,15 @@
 use crate::bus::Bus;
+use crate::cpu::instructions::*;
+use crate::cpu::addressing_modes::{AddressingResult, AddressingMode};
+use std::borrow::BorrowMut;
 
-pub struct R6502 {
+mod addressing_modes;
+mod instructions;
+
+/// NES 6502 CPU
+/// No BCD support
+#[derive(Debug)]
+pub struct Cpu {
     flags: CpuStateFlags,
     a: u8,
     x: u8,
@@ -22,21 +31,14 @@ bitflags! {
         const V = 0b01000000; // Overflow
         const N = 0b10000000; // Negative
 
-        const Init = 0x00_u8 | 0b00100000; // Initial state at reset
+        //const Init = 0x00_u8 | 0b00100000; // Initial state at reset
     }
 }
 
-mod addressing_modes;
-mod instructions;
-
-use crate::cpu::instructions::*;
-use crate::cpu::addressing_modes::{AddressingResult, AddressingMode};
-use std::borrow::BorrowMut;
-
-impl R6502 {
+impl Cpu {
     pub(crate) fn new() -> Self {
-        return R6502 {
-            flags: CpuStateFlags::Init,
+        return Cpu {
+            flags: CpuStateFlags::empty(),
             a: 0x00u8,
             x: 0x00u8,
             y: 0x00u8,
@@ -47,8 +49,8 @@ impl R6502 {
         };
     }
 
-    fn clock(bus: &Bus) {
-        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+    pub fn clock(bus: &Bus) {
+        let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
         if (cpu.rem_cycles == 0) {
             let opcode = bus.read(cpu.pc, false);
             cpu.pc += 1;
@@ -57,20 +59,24 @@ impl R6502 {
             cpu.rem_cycles = instruction.cycles;
 
             let iw = instruction.work;
+
+            println!("Executing {} (code={})", instruction.name, opcode);
             iw(cpu, bus, instruction.addressing);
+
+            println!("{:?}", cpu)
         }
 
         cpu.rem_cycles -= 1;
     }
 
-    fn reset(bus: &Bus) {
-        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+    pub fn reset(bus: &Bus) {
+        let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
         cpu.a = 0;
         cpu.x = 0;
         cpu.y = 0;
 
         cpu.sp = 0xFD;
-        cpu.flags = CpuStateFlags::Init;
+        cpu.flags = CpuStateFlags::U;
 
         let reset_vector = 0xFFFCu16;
         let lo = bus.read(reset_vector, false) as u16;
@@ -81,7 +87,7 @@ impl R6502 {
     }
 
     fn irq(bus: &Bus) {
-        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+        let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
 
         if !CpuStateFlags::contains(&mut cpu.flags, CpuStateFlags::I) {
             bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
@@ -106,7 +112,7 @@ impl R6502 {
     }
 
     fn nmi(bus: &mut Bus) {
-        let cpu: &mut R6502 = &mut bus.cpu.borrow_mut();
+        let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
         bus.write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
         cpu.sp -= 1;
         bus.write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
@@ -127,7 +133,7 @@ impl R6502 {
         cpu.rem_cycles = 8;
     }
 
-    pub fn fetch(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u8 {
+    pub fn fetch(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u8 {
         //let addressing_mode = instruction.addressing;
         let what_to_fetch = addressing_mode(cpu, bus);
         match what_to_fetch {
@@ -143,7 +149,7 @@ impl R6502 {
         }
     }
 
-    pub fn address_rel(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+    pub fn address_rel(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
         let where_to_fetch = addressing_mode(cpu, bus);
         match where_to_fetch {
             AddressingResult::ProgramCounterRelative { address_rel } => {
@@ -156,7 +162,7 @@ impl R6502 {
         }
     }
 
-    pub fn address(cpu: &mut R6502, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
+    pub fn address(cpu: &mut Cpu, bus: &Bus, addressing_mode: AddressingMode) -> u16 {
         let where_to_fetch = addressing_mode(cpu, bus);
         match where_to_fetch {
             AddressingResult::ReadFrom { address, cycles } => {

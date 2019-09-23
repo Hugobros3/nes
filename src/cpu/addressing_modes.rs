@@ -1,7 +1,7 @@
-use crate::cpu::R6502;
+use crate::cpu::Cpu;
 use crate::bus::Bus;
 
-pub type AddressingMode = fn(&mut R6502, &Bus) -> AddressingResult;
+pub type AddressingMode = fn(&mut Cpu, &Bus) -> AddressingResult;
 
 /*enum AddressingMdode {
     IMP,
@@ -31,24 +31,24 @@ pub enum AddressingResult {
     }
 }
 
-pub fn IMP(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn IMP(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     return AddressingResult::Implicit {data: cpu.a }
 }
 
-pub fn IMM(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn IMM(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let address = cpu.pc;
     cpu.pc+=1;
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZP0(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ZP0(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut address = bus.read(cpu.pc, false) as u16;
     address &= 0x00FFu16;
     cpu.pc+=1;
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZPX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ZPX(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut address = bus.read(cpu.pc, false) as u16;
     address += cpu.x as u16;
     address &= 0x00FFu16;
@@ -56,7 +56,7 @@ pub fn ZPX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZPY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ZPY(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut address = bus.read(cpu.pc, false) as u16;
     address += cpu.y as u16;
     address &= 0x00FFu16;
@@ -64,7 +64,7 @@ pub fn ZPY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ABS(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ABS(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let low = bus.read(cpu.pc, false);
     cpu.pc+=1;
     let hi = bus.read(cpu.pc, false);
@@ -73,7 +73,7 @@ pub fn ABS(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ABX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ABX(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let low = bus.read(cpu.pc, false);
     cpu.pc+=1;
     let hi = bus.read(cpu.pc, false);
@@ -90,7 +90,7 @@ pub fn ABX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn ABY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn ABY(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let low = bus.read(cpu.pc, false);
     cpu.pc+=1;
     let hi = bus.read(cpu.pc, false);
@@ -107,7 +107,7 @@ pub fn ABY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn IND(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn IND(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let ptr_low = bus.read(cpu.pc, false);
     cpu.pc+=1;
     let ptr_hi = bus.read(cpu.pc, false);
@@ -128,7 +128,7 @@ pub fn IND(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: 0 }
 }
 
-pub fn IZX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn IZX(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut ptr = bus.read(cpu.pc, false) as u16;
     cpu.pc+=1;
 
@@ -142,7 +142,7 @@ pub fn IZX(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: 0 }
 }
 
-pub fn IZY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn IZY(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut ptr = bus.read(cpu.pc, false) as u16;
     cpu.pc+=1;
 
@@ -160,7 +160,7 @@ pub fn IZY(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn REL(cpu: &mut R6502, bus: &Bus) -> AddressingResult {
+pub fn REL(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let mut address_rel = bus.read(cpu.pc, false) as u16;
     cpu.pc += 1;
 
