@@ -46,21 +46,21 @@ impl R6502 {
         };
     }
 
-    fn clock(&mut self, bus: &Bus) {
-        if (self.rem_cycles == 0) {
-            let opcode = bus.read(self.pc, false);
-            self.pc += 1;
+    fn clock(bus: &Bus) {
+        if (bus.cpu.borrow().rem_cycles == 0) {
+            let opcode = bus.read(bus.cpu.borrow().pc, false);
+            bus.cpu.borrow_mut().pc += 1;
 
             let instruction = &INSTRUCTIONS[opcode as usize];
-            self.rem_cycles = instruction.cycles;
+            bus.cpu.borrow_mut().rem_cycles = instruction.cycles;
 
             //TODO cycles
         }
 
-        self.rem_cycles -= 1;
+        bus.cpu.borrow_mut().rem_cycles -= 1;
     }
 
-    fn reset(bus: &mut Bus) {
+    fn reset(bus: &Bus) {
         bus.cpu.a = 0;
         bus.cpu.x = 0;
         bus.cpu.y = 0;
@@ -73,11 +73,10 @@ impl R6502 {
         let hi = bus.read(reset_vector + 1, false) as u16;
 
         bus.cpu.pc = (hi << 8) | lo;
-
         bus.cpu.rem_cycles = 8;
     }
 
-    fn irq(bus: &mut Bus) {
+    fn irq(bus: &Bus) {
         if !CpuStateFlags::contains(&mut bus.cpu.flags, CpuStateFlags::I) {
             bus.write(0x0100 + bus.cpu.sp as u16, (bus.cpu.pc >> 8) as u8);
             bus.cpu.sp -= 1;
@@ -121,20 +120,23 @@ impl R6502 {
         bus.cpu.rem_cycles = 8;
     }
 
-    pub fn fetch(bus: &mut Bus, addressing_mode: AddressingMode) -> u8 {
+    pub fn fetch(bus: &Bus, addressing_mode: AddressingMode) -> u8 {
         //let addressing_mode = instruction.addressing;
         let what_to_fetch = addressing_mode(bus);
         match what_to_fetch {
             AddressingResult::Implicit { data } => {
                 return data;
             }
+            AddressingResult::ReadFrom { address, cycles } => {
+                return bus.read(address, false);
+            },
             _ => {
                 panic!("lol")
             }
         }
     }
 
-    pub fn address(bus: &mut Bus, addressing_modes: AddressingMode) -> u16 {
+    pub fn address(bus: &Bus, addressing_mode: AddressingMode) -> u16 {
         let where_to_fetch = addressing_mode(bus);
         match where_to_fetch {
             AddressingResult::Implicit { data } => {
@@ -149,19 +151,4 @@ impl R6502 {
             }
         }
     }
-}
-
-impl CpuStateFlags {
-    /*fn set(self, bits: u8, value: bool) -> u8 {
-        let stripped = bits & !self.bits;
-        if value {
-            return stripped | self.bits;
-        } else {
-            return stripped;
-        }
-    }
-
-    fn get(self, bits: u8) -> bool {
-        return bits & self.bits != 0;
-    }*/
 }

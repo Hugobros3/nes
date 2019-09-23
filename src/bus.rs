@@ -1,8 +1,9 @@
 use crate::cpu::R6502;
+use std::cell::RefCell;
 
 pub struct Bus {
-    pub cpu: R6502,
-    pub ram: [u8;65536]
+    pub cpu: RefCell<R6502>,
+    pub ram: RefCell<[u8;65536]>
 }
 
 impl Bus {
@@ -22,8 +23,8 @@ impl Bus {
 
     pub fn new() -> Self {
         return Bus {
-            cpu: R6502::new(),
-            ram: [0;65536]
+            cpu: RefCell::new(R6502::new()),
+            ram: RefCell::new([0;65536])
         }
     }
 }

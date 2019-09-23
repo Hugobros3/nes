@@ -3,9 +3,7 @@ use crate::bus::Bus;
 use crate::cpu::R6502;
 use crate::cpu::CpuStateFlags;
 
-//pub const INSTRUCTIONS: &'static [Instruction] = &[
-pub const INSTRUCTIONS: [Instruction;256] = [
-    //i("BRK", IMM, break_implem, 7)
+pub const INSTRUCTIONS: [Instruction; 256] = [
     Instruction { name: "BRK", work: BRK, addressing: IMM, cycles: 7 },
     Instruction { name: "ORA", work: ORA, addressing: IZX, cycles: 6 },
     Instruction { name: "???", work: XXX, addressing: IMP, cycles: 2 },
@@ -264,15 +262,6 @@ pub const INSTRUCTIONS: [Instruction;256] = [
     Instruction { name: "???", work: XXX, addressing: IMP, cycles: 7 },
 ];
 
-// won't bother with this tbh
-/*const fn i(name: &'static str, addressing_mode: AddressingMode, actual_work: InstructionWork, cycles: i8) -> Instruction {
-    return Instruction {
-        name,
-        fn_pointer: actual_work,
-        cycles: cycles,
-    }
-}*/
-
 pub struct Instruction {
     pub name: &'static str,
     pub work: InstructionWork,
@@ -286,12 +275,9 @@ fn XXX(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     panic!("Illegal instruction")
 }
 
-fn AND(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
-    let fetched = R6502::fetch(bus, addressing_mode);
-    bus.cpu.a = bus.cpu.a & fetched;
-    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, bus.cpu.a == 0x00u8);
-    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, bus.cpu.a & 0x80u8 != 0);
-    return 1;
+fn JMP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.pc = R6502::address(bus, addressing_mode);
+    return 0;
 }
 
 // Branch on carry set
@@ -488,6 +474,12 @@ fn CLI(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     return 0;
 }
 
+// Clear overflow
+fn CLV(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::V, false);
+    return 0;
+}
+
 // Set carry flag
 fn SEC(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, true);
@@ -562,6 +554,51 @@ fn PLA(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     return 0;
 }
 
+// Push status register to stack
+fn PHP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.write(0x0100u16 + bus.cpu.sp as u16, bus.cpu.flags.bits | CpuStateFlags::B.bits | CpuStateFlags::U.bits);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::B, false);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::U, false);
+    bus.cpu.sp -= 1;
+    return 0;
+}
+
+// Pop status register from stack
+fn PLP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.sp += 1;
+    bus.cpu.flags.bits = bus.read(0x0100u16 + bus.cpu.sp as u16, false);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::U, true);
+
+    return 0;
+}
+
+// Break (manual interrupt)
+fn BRK(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.pc += 1;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::I, true);
+    // Push PC
+    bus.write(0x0100 + bus.cpu.sp as u16, (bus.cpu.pc >> 8) as u8);
+    bus.cpu.sp -= 1;
+    bus.write(0x0100 + bus.cpu.sp as u16, (bus.cpu.pc & 0x00FFu16) as u8);
+    bus.cpu.sp -= 1;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::B, true);
+    // Push SP
+    bus.write(0x0100 + bus.cpu.sp as u16, bus.cpu.flags.bits);
+    bus.cpu.sp -= 1;
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::B, false);
+
+    // Read PC from interrupt vector
+    let interrupt_vector = 0xFFFEu16;
+    let lo = bus.read(interrupt_vector, false) as u16;
+    let hi = bus.read(interrupt_vector + 1, false) as u16;
+
+    bus.cpu.pc = (hi << 8) | lo;
+    return 0;
+}
+
 // Return from interrupt
 fn RTI(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     bus.cpu.sp += 1;
@@ -576,6 +613,19 @@ fn RTI(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     let pc_hi = bus.read(0x0100u16 + bus.cpu.sp as u16, false) as u16;
 
     bus.cpu.pc = (pc_hi << 8) | pc_lo;
+    return 0;
+}
+
+fn JSR(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.sp = bus.cpu.sp.wrapping_sub(1);
+
+    // Push PC
+    bus.write(0x0100 + bus.cpu.sp as u16, (bus.cpu.pc >> 8) as u8);
+    bus.cpu.sp -= 1;
+    bus.write(0x0100 + bus.cpu.sp as u16, (bus.cpu.pc & 0x00FFu16) as u8);
+    bus.cpu.sp -= 1;
+
+    bus.cpu.pc = R6502::address(bus, addressing_mode);
     return 0;
 }
 
@@ -691,9 +741,203 @@ fn LDY(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
 fn LSR(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
     let fetched = R6502::fetch(bus, addressing_mode);
 
-    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, fetched & 0x01);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, (fetched & 0x01) == 0x01);
     let temp = fetched >> 1;
 
     CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (fetched & 0x00FF) == 0x0000);
     CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (fetched & 0x0080) != 0x0000);
+
+    if let AddressingResult::Implicit { data } = addressing_mode(bus) {
+        bus.cpu.a = (temp & 0x0FF) as u8;
+    } else {
+        bus.write(R6502::address(bus, addressing_mode), (temp & 0x00FF) as u8);
+    }
+
+    return 0;
+}
+
+// No op
+fn NOP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    return 1;
+}
+
+// Bitwise And
+fn AND(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    bus.cpu.a = bus.cpu.a & fetched;
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, bus.cpu.a == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, bus.cpu.a & 0x80u8 != 0);
+    return 1;
+}
+
+// Bitwise Or
+fn ORA(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    bus.cpu.a = bus.cpu.a | fetched;
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, bus.cpu.a == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, bus.cpu.a & 0x80u8 != 0);
+    return 1;
+}
+
+// Bitwise Xor
+fn EOR(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    bus.cpu.a = bus.cpu.a ^ fetched;
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, bus.cpu.a == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, bus.cpu.a & 0x80u8 != 0);
+    return 1;
+}
+
+// Shift left
+fn ROL(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode) as u16;
+    let carry_in = if CpuStateFlags::contains(&mut bus.cpu.flags, CpuStateFlags::C) { 1u16 } else { 0u16 };
+    let temp = fetched << 1 | carry_in;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, (temp & 0xFF00u16) != 0);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+
+    if let AddressingResult::Implicit { data } = addressing_mode(bus) {
+        bus.cpu.a = (temp & 0x0FF) as u8;
+    } else {
+        bus.write(R6502::address(bus, addressing_mode), (temp & 0x00FF) as u8);
+    }
+
+    return 0;
+}
+
+// Shift right (beamng is better tbh)
+fn ROR(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode) as u16;
+    let carry_in = if CpuStateFlags::contains(&mut bus.cpu.flags, CpuStateFlags::C) { 1u16 } else { 0u16 };
+    let temp = carry_in << 7 | fetched >> 1;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, (temp & 0xFF00u16) != 0);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+
+    if let AddressingResult::Implicit { data } = addressing_mode(bus) {
+        bus.cpu.a = (temp & 0x0FF) as u8;
+    } else {
+        bus.write(R6502::address(bus, addressing_mode), (temp & 0x00FF) as u8);
+    }
+
+    return 0;
+}
+
+// Shift left
+fn ASL(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode) as u16;
+    let temp = fetched << 1;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, (temp & 0xFF00u16) != 0);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+
+    if let AddressingResult::Implicit { data } = addressing_mode(bus) {
+        bus.cpu.a = (temp & 0x0FF) as u8;
+    } else {
+        bus.write(R6502::address(bus, addressing_mode), (temp & 0x00FF) as u8);
+    }
+
+    return 0;
+}
+
+// Bit testing (does the mask match anything ?)
+fn BIT(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = bus.cpu.a & fetched;
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & (1 << 7)) != 0);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::V, (fetched & (1 << 6)) != 0);
+    return 0;
+}
+
+// Compare A with ...
+fn CMP(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = (bus.cpu.a as u16).wrapping_sub(fetched as u16);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, bus.cpu.a as u16 >= fetched as u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+    return 1;
+}
+
+// Compare X with ...
+fn CPX(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = (bus.cpu.x as u16).wrapping_sub(fetched as u16);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, bus.cpu.x as u16 >= fetched as u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+    return 1;
+}
+
+// Compare Y with ...
+fn CPY(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = (bus.cpu.y as u16).wrapping_sub(fetched as u16);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::C, bus.cpu.y as u16 >= fetched as u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
+    return 1;
+}
+
+// Decrement memory location
+fn DEC(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = fetched.wrapping_sub(1u8);
+    bus.write(R6502::address(bus, addressing_mode), temp);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.x & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.x & 0x80u8) != 0);
+    return 0;
+}
+
+// Decrement X
+fn DEX(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.x = bus.cpu.x.wrapping_sub(1);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.x & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.x & 0x80u8) != 0);
+    return 0;
+}
+
+// Decrement Y
+fn DEY(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.y = bus.cpu.y.wrapping_sub(1);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.y & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.y & 0x80u8) != 0);
+    return 0;
+}
+
+// Increment memory location
+fn INC(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    let fetched = R6502::fetch(bus, addressing_mode);
+    let temp = fetched.wrapping_add(1u8);
+    bus.write(R6502::address(bus, addressing_mode), temp);
+
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.x & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.x & 0x80u8) != 0);
+    return 0;
+}
+
+// Increment X
+fn INX(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.x = bus.cpu.x.wrapping_add(1);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.x & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.x & 0x80u8) != 0);
+    return 0;
+}
+
+// Increment Y
+fn INY(bus: &mut Bus, addressing_mode: AddressingMode) -> i8 {
+    bus.cpu.y = bus.cpu.y.wrapping_add(1);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::Z, (bus.cpu.y & 0xFFu8) == 0x00u8);
+    CpuStateFlags::set(&mut bus.cpu.flags, CpuStateFlags::N, (bus.cpu.y & 0x80u8) != 0);
+    return 0;
 }

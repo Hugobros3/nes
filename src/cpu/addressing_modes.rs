@@ -1,12 +1,7 @@
 use crate::cpu::R6502;
 use crate::bus::Bus;
 
-/*struct AddressingMode {
-    name: &'static str,
-
-}*/
-
-pub type AddressingMode = fn(&mut Bus) -> AddressingResult;
+pub type AddressingMode = fn(&Bus) -> AddressingResult;
 
 /*enum AddressingMdode {
     IMP,
@@ -36,24 +31,24 @@ pub enum AddressingResult {
     }
 }
 
-pub fn IMP(bus: &mut Bus) -> AddressingResult {
+pub fn IMP(bus: &Bus) -> AddressingResult {
     return AddressingResult::Implicit {data: bus.cpu.a }
 }
 
-pub fn IMM(bus: &mut Bus) -> AddressingResult {
+pub fn IMM(bus: &Bus) -> AddressingResult {
     let address = bus.cpu.pc;
     bus.cpu.pc+=1;
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZP0(bus: &mut Bus) -> AddressingResult {
+pub fn ZP0(bus: &Bus) -> AddressingResult {
     let mut address = bus.read(bus.cpu.pc, false) as u16;
     address &= 0x00FFu16;
     bus.cpu.pc+=1;
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZPX(bus: &mut Bus) -> AddressingResult {
+pub fn ZPX(bus: &Bus) -> AddressingResult {
     let mut address = bus.read(bus.cpu.pc, false) as u16;
     address += bus.cpu.x as u16;
     address &= 0x00FFu16;
@@ -61,7 +56,7 @@ pub fn ZPX(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ZPY(bus: &mut Bus) -> AddressingResult {
+pub fn ZPY(bus: &Bus) -> AddressingResult {
     let mut address = bus.read(bus.cpu.pc, false) as u16;
     address += bus.cpu.y as u16;
     address &= 0x00FFu16;
@@ -69,7 +64,7 @@ pub fn ZPY(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ABS(bus: &mut Bus) -> AddressingResult {
+pub fn ABS(bus: &Bus) -> AddressingResult {
     let low = bus.read(bus.cpu.pc, false);
     bus.cpu.pc+=1;
     let hi = bus.read(bus.cpu.pc, false);
@@ -78,7 +73,7 @@ pub fn ABS(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles:0 }
 }
 
-pub fn ABX(bus: &mut Bus) -> AddressingResult {
+pub fn ABX(bus: &Bus) -> AddressingResult {
     let low = bus.read(bus.cpu.pc, false);
     bus.cpu.pc+=1;
     let hi = bus.read(bus.cpu.pc, false);
@@ -95,7 +90,7 @@ pub fn ABX(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn ABY(bus: &mut Bus) -> AddressingResult {
+pub fn ABY(bus: &Bus) -> AddressingResult {
     let low = bus.read(bus.cpu.pc, false);
     bus.cpu.pc+=1;
     let hi = bus.read(bus.cpu.pc, false);
@@ -112,7 +107,7 @@ pub fn ABY(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn IND(bus: &mut Bus) -> AddressingResult {
+pub fn IND(bus: &Bus) -> AddressingResult {
     let ptr_low = bus.read(bus.cpu.pc, false);
     bus.cpu.pc+=1;
     let ptr_hi = bus.read(bus.cpu.pc, false);
@@ -133,7 +128,7 @@ pub fn IND(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: 0 }
 }
 
-pub fn IZX(bus: &mut Bus) -> AddressingResult {
+pub fn IZX(bus: &Bus) -> AddressingResult {
     let mut ptr = bus.read(bus.cpu.pc, false) as u16;
     bus.cpu.pc+=1;
 
@@ -147,7 +142,7 @@ pub fn IZX(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: 0 }
 }
 
-pub fn IZY(bus: &mut Bus) -> AddressingResult {
+pub fn IZY(bus: &Bus) -> AddressingResult {
     let mut ptr = bus.read(bus.cpu.pc, false) as u16;
     bus.cpu.pc+=1;
 
@@ -165,7 +160,7 @@ pub fn IZY(bus: &mut Bus) -> AddressingResult {
     return AddressingResult::ReadFrom { address, cycles: additional_cycles }
 }
 
-pub fn REL(bus: &mut Bus) -> AddressingResult {
+pub fn REL(bus: &Bus) -> AddressingResult {
     let mut address_rel = bus.read(bus.cpu.pc, false) as u16;
     bus.cpu.pc += 1;
 
