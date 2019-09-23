@@ -755,7 +755,7 @@ fn ROL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
 
-    if instruction.addressing == IMM {
+    if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
         bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
@@ -774,7 +774,7 @@ fn ROR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
 
-    if instruction.addressing == IMM {
+    if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
         bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
@@ -792,7 +792,7 @@ fn ASL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (temp & 0x00FFu16) == 0x0000u16);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (temp & 0x0080u16) != 0);
 
-    if instruction.addressing == IMM {
+    if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
         bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
@@ -811,7 +811,7 @@ fn LSR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::Z, (fetched & 0x00FF) == 0x0000);
     CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::N, (fetched & 0x0080) != 0x0000);
 
-    if instruction.addressing == IMM {
+    if instruction.addressing == IMP {
         cpu.a = (temp & 0x0FF) as u8;
     } else {
         bus.write(instruction.addressing.address(cpu, bus), (temp & 0x00FF) as u8);
