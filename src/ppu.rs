@@ -1,3 +1,5 @@
+pub mod debug;
+
 pub struct Ppu {
     nametables: [[u8;1024];2],
     palette: [u8; 32]
@@ -11,7 +13,7 @@ impl Ppu {
         };
     }
 
-    pub fn cpu_read(&self, address: u16, read_only: bool) -> u8 {
+    pub fn cpu_read(&mut self, address: u16, read_only: bool) -> u8 {
         match(address) {
             0x0000 => { // Control
 
@@ -43,7 +45,7 @@ impl Ppu {
         return 0;
     }
 
-    pub fn cpu_write(&self, address: u16, data: u8) {
+    pub fn cpu_write(&mut self, address: u16, data: u8) {
         match(address) {
             0x0000 => { // Control
 
@@ -71,15 +73,5 @@ impl Ppu {
             },
             _ => panic!("Unreachable")
         }
-    }
-
-    pub fn ppu_read(&self, address: u16, read_only: bool) -> u8 {
-        //TODO cartdrige override
-        let address = address & 0x3FFFu16;
-        return 0;
-    }
-    pub fn ppu_write(&self, address: u16, data: u8) {
-        //TODO cartdrige override
-        let address = address & 0x3FFFu16;
     }
 }

@@ -2,6 +2,8 @@ use crate::cartdrige::Cartdrige;
 use std::fs::File;
 use std::io::{Read, BufReader};
 
+use crate::mappers::{create_mmc0_cartdrige};
+
 const INES_MAGIC_BYTES: &'static str = "NES\u{001a}";
 
 pub fn load_rom_file_as_cartdrige(filename: &str) -> Box<dyn Cartdrige> {
@@ -12,25 +14,7 @@ pub fn load_rom_file_as_cartdrige(filename: &str) -> Box<dyn Cartdrige> {
 
     match header.mapper_type {
         0 => {
-            let mut prg_rom = Vec::<[u8;16384]>::new();
-            for i in 0..header.prg_pages {
-                let mut page = [0; 16384];
-                reader.read_exact(&mut page);
-                prg_rom.push(page);
-            }
-            let mut chr_rom = Vec::<[u8;8192]>::new();
-            for i in 0..header.chr_pages {
-                let mut page = [0; 8192];
-                reader.read_exact(&mut page);
-                chr_rom.push(page);
-            }
-
-            return Box::new(Mapper0Cartdrige {
-                prg_rom,
-                prg_banks: header.prg_pages,
-                chr_rom,
-                chr_banks: header.chr_pages,
-            });
+            return create_mmc0_cartdrige(&mut reader, header);
         }
         _ => {
             panic!("Unsupported mapper type: {}", header.mapper_type)
@@ -92,19 +76,19 @@ fn read_header(reader: &mut BufReader<File>) -> INesHeaderInfo {
     };
 }
 
-enum MirroringMode {
+pub enum MirroringMode {
     Horizontal,
     Vertical,
     FourScreen,
 }
 
-struct INesHeaderInfo {
-    mapper_type: u8,
-    mirroring_mode: MirroringMode,
-    batter_backed_prg_ram: bool,
-    trainer_present: bool,
-    prg_pages: u8,
-    chr_pages: u8,
+pub struct INesHeaderInfo {
+    pub mapper_type: u8,
+    pub mirroring_mode: MirroringMode,
+    pub batter_backed_prg_ram: bool,
+    pub trainer_present: bool,
+    pub prg_pages: u8,
+    pub chr_pages: u8,
     //prg_ram_size: u8,
 }
 
@@ -112,39 +96,4 @@ fn read_byte(reader: &mut BufReader<File>) -> u8 {
     let mut buf = [0u8];
     reader.read_exact(&mut buf);
     return buf[0];
-}
-
-struct Mapper0Cartdrige {
-    prg_rom: Vec<[u8;16384]>,
-    prg_banks: u8,
-    chr_rom: Vec<[u8;8192]>,
-    chr_banks: u8,
-}
-
-impl Cartdrige for Mapper0Cartdrige {
-    fn cpu_read(&self, address: u16, data: &mut u8) -> bool {
-        if address >= 0x8000u16 && address <= 0xFFFFu16 {
-            let bank = (address & 0x7FFF) >> 14;
-            *data = self.prg_rom[bank as usize][(address & 0x3FFF) as usize];
-            return true;
-        }
-        return false;
-    }
-
-    fn cpu_write(&self, address: u16, data: u8) -> bool {
-        if address >= 0x8000u16 && address <= 0xFFFFu16 {
-            let bank = (address & 0x7FFF) >> 14;
-            //*data = self.prg_rom[bank as usize][(address & 0x3FFF) as usize];
-            return true;
-        }
-        return false;
-    }
-
-    fn ppu_read(&self, address: u16, data: &mut u8) -> bool {
-        unimplemented!()
-    }
-
-    fn ppu_write(&self, address: u16, data: u8) -> bool {
-        unimplemented!()
-    }
 }
