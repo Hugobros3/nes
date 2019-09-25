@@ -19,7 +19,18 @@ pub struct Cpu {
     rem_cycles: i8,
 }
 
-bitflags! {
+bf!(CpuStateFlags[u8] {
+    C: 0:0,
+    Z: 1:1,
+    I: 2:2,
+    D: 3:3,
+    B: 4:4,
+    U: 5:5,
+    V: 6:6,
+    N: 7:7
+});
+
+/*bitflags! {
     pub struct CpuStateFlags: u8 {
         const C = 0b00000001; // Carry
         const Z = 0b00000010; // Zero
@@ -30,12 +41,12 @@ bitflags! {
         const V = 0b01000000; // Overflow
         const N = 0b10000000; // Negative
     }
-}
+}*/
 
 impl Cpu {
     pub(crate) fn new() -> Self {
         return Cpu {
-            flags: CpuStateFlags::empty(),
+            flags: CpuStateFlags::new(0),
             a: 0x00u8,
             x: 0x00u8,
             y: 0x00u8,
@@ -73,7 +84,8 @@ impl Cpu {
         cpu.y = 0;
 
         cpu.sp = 0xFD;
-        cpu.flags = CpuStateFlags::U;
+        cpu.flags = CpuStateFlags::new(0);
+        cpu.flags.set_U(1);// = CpuStateFlags::U;
 
         let reset_vector = 0xFFFCu16;
         let lo = bus.cpu_read(reset_vector, false) as u16;
@@ -86,16 +98,19 @@ impl Cpu {
     fn irq(bus: &Bus) {
         let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
 
-        if !CpuStateFlags::contains(&mut cpu.flags, CpuStateFlags::I) {
+        if cpu.flags.I() == 0 {
             bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc >> 8) as u8);
             cpu.sp -= 1;
             bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
             cpu.sp -= 1;
 
-            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
-            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
-            CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
-            bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+            cpu.flags.set_B(0);
+            cpu.flags.set_U(1);
+            cpu.flags.set_I(1);
+            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
+            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
+            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
+            bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.val);
             cpu.sp -= 1;
 
             let interrupt_vector = 0xFFFEu16;
@@ -115,10 +130,10 @@ impl Cpu {
         bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
         cpu.sp -= 1;
 
-        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
-        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
-        CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
-        bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.bits);
+        cpu.flags.set_B(0);
+        cpu.flags.set_U(1);
+        cpu.flags.set_I(1);
+        bus.cpu_write(0x0100 + cpu.sp as u16, cpu.flags.val);
         cpu.sp -= 1;
 
         let interrupt_vector = 0xFFFAu16;
