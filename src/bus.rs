@@ -29,7 +29,7 @@ impl Bus {
         if address >= 0x0000u16 && address < 0x1FFFu16 {
             data = self.cpu_ram.borrow()[(address & 0x07FF) as usize]
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
-            data = self.ppu.borrow_mut().cpu_read(address & 0x0007, read_only);
+            data = self.ppu.borrow_mut().read_ppu_register(address & 0x0007, read_only);
         }
 
         return data;
@@ -42,24 +42,8 @@ impl Bus {
         else if address >= 0x0000u16 && address < 0x1FFFu16 {
             self.cpu_ram.borrow_mut()[(address & 0x07FF) as usize] = data
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
-            self.ppu.borrow_mut().cpu_write(address & 0x0007, data);
+            self.ppu.borrow_mut().write_ppu_register(address & 0x0007, data);
         }
-    }
-
-    pub fn ppu_read(&self, address: u16, read_only: bool) -> u8 {
-        let address = address & 0x3FFFu16;
-        let mut data = 0u8;
-
-        let mut cart_brw = self.cartdrige.borrow_mut();
-        let cart_ref = cart_brw.as_mut();
-        if(cart_ref.is_some() && cart_ref.unwrap().ppu_read(address,  &mut data )) {}
-
-        return data;
-    }
-
-    pub fn ppu_write(&mut self, address: u16, data: u8) {
-        //TODO cartdrige override
-        let address = address & 0x3FFFu16;
     }
 
     pub fn load_cartdrige(&mut self, cart: Box<dyn Cartdrige>) {

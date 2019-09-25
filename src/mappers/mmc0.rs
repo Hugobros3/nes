@@ -17,21 +17,27 @@ pub fn create_mmc0_cartdrige<T: Read>(reader: &mut BufReader<T>, header: INesHea
     }
 
     return Box::new(Mapper0Cartdrige {
+        header,
         prg_rom,
-        prg_banks: header.prg_pages,
+        //prg_banks: header.prg_pages,
         chr_rom,
-        chr_banks: header.chr_pages,
+        //chr_banks: header.chr_pages,
     });
 }
 
 struct Mapper0Cartdrige {
+    header: INesHeaderInfo,
     prg_rom: Vec<[u8;16384]>,
-    prg_banks: u8,
+    //prg_banks: u8,
     chr_rom: Vec<[u8;8192]>,
-    chr_banks: u8,
+    //chr_banks: u8,
 }
 
 impl Cartdrige for Mapper0Cartdrige {
+    fn get_info(&self) -> &INesHeaderInfo {
+        return &self.header;
+    }
+
     fn cpu_read(&mut self, address: u16, data: &mut u8) -> bool {
         if address >= 0x8000u16 && address <= 0xFFFFu16 {
             let bank = (address & 0x7FFF) >> 14;

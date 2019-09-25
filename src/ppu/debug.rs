@@ -33,12 +33,13 @@ pub fn show_patterns_debug_window(bus: &Bus) {
                 let tile_col: u16 = in_bank_x / 8;
                 let tile_row: u16 = y as u16 / 8;
 
-                let lsb = bus.ppu_read(bank << 12 | tile_row << 8 | tile_col << 4 | 0 << 3 | fine_y, false);
-                let msb = bus.ppu_read(bank << 12 | tile_row << 8 | tile_col << 4 | 1 << 3 | fine_y, false);
+                let lsb = bus.ppu.borrow_mut().ppu_read(bus, bank << 12 | tile_row << 8 | tile_col << 4 | 0 << 3 | fine_y, false);
+                let msb = bus.ppu.borrow_mut().ppu_read(bus, bank << 12 | tile_row << 8 | tile_col << 4 | 1 << 3 | fine_y, false);
 
                 let fine_x = 7 - (x as u16 & 7);
 
                 let indexed_color: u8 = ((msb >> fine_x) & 0x1) << 1 | (lsb >> fine_x) & 0x01;
+                //TODO use real palettes
                 let color = match (indexed_color) {
                     0 => Color(0.0, 0.0, 0.0),
                     1 => Color(1.0, 0.0, 0.0),
@@ -46,7 +47,6 @@ pub fn show_patterns_debug_window(bus: &Bus) {
                     _ => Color(0.0, 0.0, 1.0),
                 };
 
-                //buffer[y * width + x] = rgb(&Color(x as f32 / 256f32, 0f32, 0f32));
                 buffer[(y as usize * width + x as usize)] = rgb(&color);
             }
         }
