@@ -68,10 +68,10 @@ impl Cpu {
 
             let instruction_implementation = instruction.implementation;
 
+            println!("status: {:?}", cpu);
             println!("Executing {} (code={})", instruction.name, opcode);
             instruction_implementation(cpu, bus, instruction);
 
-            println!("{:?}", cpu)
         }
 
         cpu.rem_cycles -= 1;

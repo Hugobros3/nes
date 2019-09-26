@@ -272,7 +272,8 @@ pub const INSTRUCTIONS: [Instruction; 256] = [
 ];
 
 fn XXX(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
-    panic!("Illegal instruction")
+    panic!("Illegal instruction");
+    return 0;
 }
 
 fn JMP(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
@@ -390,6 +391,7 @@ fn BPL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
         }
 
         cpu.pc = address_abs;
+        println!("new pc: {}", cpu.pc);
     }
     return 0;
 }
@@ -626,7 +628,7 @@ fn JSR(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction) -> i8 {
     bus.cpu_write(0x0100 + cpu.sp as u16, (cpu.pc & 0x00FFu16) as u8);
     cpu.sp -= 1;
 
-    cpu.pc = instruction.addressing.address_rel(cpu, bus);
+    cpu.pc = instruction.addressing.address(cpu, bus);
     return 0;
 }
 

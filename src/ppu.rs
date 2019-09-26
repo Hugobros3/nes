@@ -2,7 +2,8 @@ use crate::bus::Bus;
 use crate::main;
 use crate::ines_loader::MirroringMode;
 
-pub mod debug;
+pub mod patterns_debug_viewer;
+mod palette;
 
 bf!(Status[u8] {
     unused: 0:4,
@@ -120,6 +121,7 @@ impl Ppu {
                 if(read_only) {
                     data = self.status.val;
                 } else {
+                    self.status.set_vertical_blank(1);
                     data = (self.status.val & 0xE0) | (self.ppu_data_buffer & 0x1F);
                     self.status.set_vertical_blank(0);
                     self.address_latch = 0;
@@ -134,10 +136,10 @@ impl Ppu {
             0x0006 => { // PPU Address
             }
             0x0007 => { // PPU data
-                if(!read_only) {
+                if !read_only {
                     data = self.ppu_data_buffer;
                     self.ppu_data_buffer = self.ppu_read(bus, address, read_only);
-                    if(self.vram_addr.val >= 0x3F00) {
+                    if self.vram_addr.val >= 0x3F00 {
                         data = self.ppu_data_buffer;
                     }
                     self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
@@ -152,8 +154,10 @@ impl Ppu {
     pub fn write_ppu_register(&mut self, bus: &Bus, address: u16, data: u8) {
         match address {
             0x0000 => { // Control
+                self.control.val = data;
             }
             0x0001 => { // Mask
+                self.mask.val = data;
             }
             0x0002 => { // Status
             }
@@ -164,8 +168,18 @@ impl Ppu {
             0x0005 => { // Scroll
             }
             0x0006 => { // PPU Address
+                if self.address_latch == 0 {
+                    self.tram_addr.val = (((data & 0x3F) as u16) << 8) | (self.tram_addr.val & 0x00FF);
+                    self.address_latch = 1;
+                } else {
+                    self.tram_addr.val = (self.tram_addr.val & 0xFF00) | (data as u16);
+                    self.vram_addr = self.tram_addr;
+                    self.address_latch = 0;
+                }
             }
             0x0007 => { // PPU data
+                self.ppu_write(bus, self.vram_addr.val, data);
+                self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
             }
             _ => panic!("Unreachable")
         }
@@ -176,9 +190,6 @@ impl Ppu {
         let mut data = 0u8;
 
         let mut cart_brw = bus.cartdrige.borrow_mut();
-        //let cart_ref = cart_brw.as_mut();
-        //if let Option::Some(cartdrige) = cart_ref {
-        //}
 
         if cart_brw.is_some() && cart_brw.as_mut().unwrap().ppu_read(address, &mut data) {} else if address >= 0x2000u16 && address <= 0x3EFF {
             let address = address & 0x0FFF;
@@ -186,6 +197,7 @@ impl Ppu {
 
             let mirroring = if cart_brw.is_some() { cart_brw.as_mut().unwrap().get_info().mirroring_mode } else { MirroringMode::Horizontal };
 
+            //TODO it doesn't work like that in actuality, emulate relevant cartdrige port lines ( CIRAM/CE CIRAM A10 )
             let tlb_bank = match mirroring {
                 MirroringMode::Horizontal => { quadrant % 2 }
                 MirroringMode::Vertical => { quadrant / 2 }
@@ -194,8 +206,11 @@ impl Ppu {
 
             data = self.nametables[tlb_bank as usize][(address & 0x03FF) as usize];
         } else if address >= 0x3F00u16 && address <= 0x3FFF {
-            let address = address & 0x1F;
-            //TODO map palette blacks ?
+            let mut address = address & 0x1F;
+            if address == 0x0010 { address = 0x0000; }
+            if address == 0x0014 { address = 0x0004; }
+            if address == 0x0018 { address = 0x0008; }
+            if address == 0x001C { address = 0x000C; }
             data = self.palette[address as usize];
         }
 
@@ -221,8 +236,11 @@ impl Ppu {
 
             self.nametables[tlb_bank as usize][(address & 0x03FF) as usize] = data;
         } else if address >= 0x3F00u16 && address <= 0x3FFF {
-            let address = address & 0x1F;
-            //TODO map palette blacks ?
+            let mut address = address & 0x1F;
+            if address == 0x0010 { address = 0x0000; }
+            if address == 0x0014 { address = 0x0004; }
+            if address == 0x0018 { address = 0x0008; }
+            if address == 0x001C { address = 0x000C; }
             self.palette[address as usize] = data;
         }
     }

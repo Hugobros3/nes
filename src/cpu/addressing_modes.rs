@@ -195,6 +195,8 @@ fn am_relative(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
         address_rel |= 0xFF00u16;
     }
 
+    println!("address_rel: {}", address_rel);
+
     return AddressingResult::ProgramCounterRelative {address_rel: address_rel}
 }
 
