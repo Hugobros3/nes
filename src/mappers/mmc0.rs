@@ -19,18 +19,14 @@ pub fn create_mmc0_cartdrige<T: Read>(reader: &mut BufReader<T>, header: INesHea
     return Box::new(Mapper0Cartdrige {
         header,
         prg_rom,
-        //prg_banks: header.prg_pages,
         chr_rom,
-        //chr_banks: header.chr_pages,
     });
 }
 
 struct Mapper0Cartdrige {
     header: INesHeaderInfo,
     prg_rom: Vec<[u8;16384]>,
-    //prg_banks: u8,
     chr_rom: Vec<[u8;8192]>,
-    //chr_banks: u8,
 }
 
 impl Cartdrige for Mapper0Cartdrige {

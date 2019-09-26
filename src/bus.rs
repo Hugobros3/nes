@@ -29,7 +29,7 @@ impl Bus {
         if address >= 0x0000u16 && address < 0x1FFFu16 {
             data = self.cpu_ram.borrow()[(address & 0x07FF) as usize]
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
-            data = self.ppu.borrow_mut().read_ppu_register(address & 0x0007, read_only);
+            data = self.ppu.borrow_mut().read_ppu_register(self, address & 0x0007, read_only);
         }
 
         return data;
@@ -42,7 +42,7 @@ impl Bus {
         else if address >= 0x0000u16 && address < 0x1FFFu16 {
             self.cpu_ram.borrow_mut()[(address & 0x07FF) as usize] = data
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
-            self.ppu.borrow_mut().write_ppu_register(address & 0x0007, data);
+            self.ppu.borrow_mut().write_ppu_register(self, address & 0x0007, data);
         }
     }
 
