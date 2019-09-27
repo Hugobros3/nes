@@ -9,4 +9,6 @@ Plan: kill two birds with one stone: get moar rust experience, and accomplish a 
 
 ## Status
 
-Ep2 of the series complete, can run some very basic 6502 code. Probably will panic when stuff over/underflows in memory.
+Ep4 of the series complete, renders the background layer with some glitches. 
+
+Passes nestest (except for illegal instructions).
