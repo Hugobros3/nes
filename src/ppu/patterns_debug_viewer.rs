@@ -2,6 +2,7 @@ use minifb::{WindowOptions, Window};
 use crate::bus::Bus;
 use crate::ppu::palette::get_colour_from_palette_ram;
 use std::borrow::Borrow;
+use crate::ppu::window_common::*;
 
 pub struct PatternsDebugWindow {
     pub window: Window,
@@ -18,7 +19,7 @@ impl PatternsDebugWindow {
             resize: false,
             ..WindowOptions::default()
         };
-        let mut window = Window::new("", width as usize, height as usize, options).unwrap_or_else(|e| { panic!("{}", e); });
+        let mut window = Window::new("Pattern tables", width as usize, height as usize, options).unwrap_or_else(|e| { panic!("{}", e); });
         return PatternsDebugWindow {
             window,
             buffer
@@ -55,40 +56,19 @@ impl PatternsDebugWindow {
                 let fine_x = 7 - (x as u8 & 7);
 
                 let indexed_color: u8 = ((msb >> fine_x) & 0x1) << 1 | (lsb >> fine_x) & 0x01;
+                let palette_rgb = get_colour_from_palette_ram(bus.ppu.borrow().borrow(), bus, 0, indexed_color);
+                self.buffer[(y as usize * width + x as usize)] = pack(palette_rgb.0, palette_rgb.1, palette_rgb.2);
                 //TODO use real palettes
-                /*let color = match (indexed_color) {
+                let color = match (indexed_color) {
                     0 => Color(0.0, 0.0, 0.0),
                     1 => Color(1.0, 0.0, 0.0),
                     2 => Color(0.0, 1.0, 0.0),
                     _ => Color(0.0, 0.0, 1.0),
-                };*/
-                let rgb = get_colour_from_palette_ram(bus.ppu.borrow().borrow(), bus, 0, indexed_color);
-
-                //buffer[(y as usize * width + x as usize)] = rgb(&color);
-                self.buffer[(y as usize * width + x as usize)] = pack(rgb.0, rgb.1, rgb.2);
+                };
+                self.buffer[(y as usize * width + x as usize)] = rgb(&color);
             }
         }
         self.window.update_with_buffer(self.buffer.as_slice()).unwrap();
         //}
     }
-}
-
-pub struct Color(pub f32, pub f32, pub f32);
-
-fn rgb(color: &Color) -> u32 {
-    let r = clamp((color.0 * 256.0) as u32, 0, 255);
-    let g = clamp((color.1 * 256.0) as u32, 0, 255);
-    let b = clamp((color.2 * 256.0) as u32, 0, 255);
-    r << 16 | g << 8 | b << 0
-}
-
-fn pack(r: u8, g: u8, b: u8) -> u32 {
-    let r = r as u32;
-    let g = g as u32;
-    let b = b as u32;
-    (r << 16 | g << 8 | b << 0)
-}
-
-fn clamp<T: PartialOrd>(v: T, min: T, max: T) -> T {
-    if v < min { min } else if v > max { max } else { v }
 }

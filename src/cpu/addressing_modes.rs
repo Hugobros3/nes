@@ -3,7 +3,7 @@ use crate::bus::Bus;
 
 pub struct AddressingMode {
     pub name: &'static str,
-    implementation: AddressingModeImplementation,
+    pub implementation: AddressingModeImplementation,
 }
 
 /// Executes the operations necessary to fetch data and returns a struct describing
@@ -40,7 +40,7 @@ pub const IND: &'static AddressingMode = &ADDRESSING_MODES[9];
 pub const IZX: &'static AddressingMode = &ADDRESSING_MODES[10];
 pub const IZY: &'static AddressingMode = &ADDRESSING_MODES[11];
 
-enum AddressingResult {
+pub enum AddressingResult {
     Implicit {
         data: u8
     },
@@ -58,9 +58,9 @@ fn am_implied(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 }
 
 fn am_immediate(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let address = cpu.pc;
+    let data = bus.cpu_read(cpu.pc, false);
     cpu.pc+=1;
-    return AddressingResult::ReadFrom { address, cycles:0 }
+    return AddressingResult::Implicit { data }
 }
 
 fn am_zero_page(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
@@ -109,7 +109,7 @@ fn am_absolute_x(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
     let additional_cycles = if(og_page != offseted_page) { 1 } else { 0 };
 
-    return AddressingResult::ReadFrom { address, cycles: additional_cycles }
+    return AddressingResult::ReadFrom { address: offseted_address, cycles: additional_cycles }
 }
 
 fn am_absolute_y(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
@@ -119,14 +119,14 @@ fn am_absolute_y(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     cpu.pc+=1;
 
     let address = ((hi as u16) << 8) | (low as u16);
-    let offseted_address = address + cpu.y as u16;
+    let offseted_address = address.wrapping_add(cpu.y as u16);
 
     let og_page = address >> 8;
     let offseted_page = offseted_address >> 8;
 
     let additional_cycles = if(og_page != offseted_page) { 1 } else { 0 };
 
-    return AddressingResult::ReadFrom { address, cycles: additional_cycles }
+    return AddressingResult::ReadFrom { address: offseted_address, cycles: additional_cycles }
 }
 
 /// Fetches a pointer then fetches the address from there
@@ -175,14 +175,14 @@ fn am_indirect_indexed(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let address_hi = bus.cpu_read((ptr + 1) & 0x00FF, false);
 
     let address = ((address_hi as u16) << 8) | (address_lo as u16);
-    let offseted_address = address + cpu.y as u16;
+    let offseted_address = address.wrapping_add(cpu.y as u16);
 
     let og_page = address >> 8;
     let offseted_page = offseted_address >> 8;
 
     let additional_cycles = if(og_page != offseted_page) { 1 } else { 0 };
 
-    return AddressingResult::ReadFrom { address, cycles: additional_cycles }
+    return AddressingResult::ReadFrom { address: offseted_address, cycles: additional_cycles }
 }
 
 /// Fetches relative to the program counter (USED BY BRANCHING INSTRUCTIONS ONLY)
@@ -195,22 +195,22 @@ fn am_relative(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
         address_rel |= 0xFF00u16;
     }
 
-    println!("address_rel: {}", address_rel);
+    //println!("address_rel: {}", address_rel);
 
     return AddressingResult::ProgramCounterRelative {address_rel: address_rel}
 }
 
-impl AddressingMode {
+impl AddressingResult {
     // Will fetch data - Cannot be called for relative addressing
     pub fn fetch(&self, cpu: &mut Cpu, bus: &Bus) -> u8 {
-        let am_implementation = self.implementation;
-        let what_to_fetch = am_implementation(cpu, bus);
-        match what_to_fetch {
+        //let am_implementation = self.implementation;
+        //let what_to_fetch = am_implementation(cpu, bus);
+        match self {
             AddressingResult::Implicit { data } => {
-                return data;
+                return *data;
             }
             AddressingResult::ReadFrom { address, cycles } => {
-                return bus.cpu_read(address, false);
+                return bus.cpu_read(*address, false);
             },
             _ => {
                 panic!("lol")
@@ -220,11 +220,11 @@ impl AddressingMode {
 
     /// Returns relative addressing offset - Can only be called for relative addressing
     pub fn offset_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        let am_implementation = self.implementation;
-        let where_to_fetch = am_implementation(cpu, bus);
-        match where_to_fetch {
+        //let am_implementation = self.implementation;
+        //let where_to_fetch = am_implementation(cpu, bus);
+        match self {
             AddressingResult::ProgramCounterRelative { address_rel } => {
-                return address_rel;
+                return *address_rel;
             }
             _ => {
                 panic!("Expected a (PC) relative address")
@@ -234,11 +234,11 @@ impl AddressingMode {
 
     /// Will compute relative address - Can only be called for relative addressing
     pub fn address_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        let am_implementation = self.implementation;
-        let where_to_fetch = am_implementation(cpu, bus);
-        match where_to_fetch {
+        //let am_implementation = self.implementation;
+        //let where_to_fetch = am_implementation(cpu, bus);
+        match self {
             AddressingResult::ProgramCounterRelative { address_rel } => {
-                let t = cpu.pc.wrapping_add(address_rel);
+                let t = cpu.pc.wrapping_add(*address_rel);
                 return t;
             }
             _ => {
@@ -249,11 +249,11 @@ impl AddressingMode {
 
     /// Will compute absolute address - Can only be called for non-immediate, non-REL addressing modes
     pub fn address(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        let am_implementation = self.implementation;
-        let where_to_fetch = am_implementation(cpu, bus);
-        match where_to_fetch {
+        //let am_implementation = self.implementation;
+        //let where_to_fetch = am_implementation(cpu, bus);
+        match self {
             AddressingResult::ReadFrom { address, cycles } => {
-                return address;
+                return *address;
             },
             _ => {
                 panic!("Expected an absolute address")

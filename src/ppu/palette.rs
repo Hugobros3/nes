@@ -71,6 +71,6 @@ const NES_PALETTE_RGB: [(u8, u8, u8); 64] = [
 ];
 
 pub fn get_colour_from_palette_ram(ppu: &Ppu, bus: &Bus, palette: u8, pixel: u8) -> (u8, u8, u8) {
-    let color_palette_index = ppu.ppu_read(bus, (0x3F00 + ((palette as u16) << 2) + pixel as u16) as u16, false);
+    let color_palette_index = ppu.ppu_read(bus, (0x3F00 + ((palette as u16) << 2) + pixel as u16) as u16, false) & 0x3F;
     return NES_PALETTE_RGB[color_palette_index as usize];
 }

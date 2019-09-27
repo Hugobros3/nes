@@ -36,7 +36,7 @@ impl Cartdrige for Mapper0Cartdrige {
 
     fn cpu_read(&mut self, address: u16, data: &mut u8) -> bool {
         if address >= 0x8000u16 && address <= 0xFFFFu16 {
-            let bank = (address & 0x7FFF) >> 14;
+            let bank = ((address & 0x7FFF) >> 14) % (self.header.prg_pages as u16);
             *data = self.prg_rom[bank as usize][(address & 0x3FFF) as usize];
             return true;
         }
@@ -45,7 +45,7 @@ impl Cartdrige for Mapper0Cartdrige {
 
     fn cpu_write(&mut self, address: u16, data: u8) -> bool {
         if address >= 0x8000u16 && address <= 0xFFFFu16 {
-            let bank = (address & 0x7FFF) >> 14;
+            let bank = ((address & 0x7FFF) >> 14) % (self.header.prg_pages as u16);
             //*data = self.prg_rom[bank as usize][(address & 0x3FFF) as usize];
             return true;
         }
@@ -63,6 +63,9 @@ impl Cartdrige for Mapper0Cartdrige {
     }
 
     fn ppu_write(&mut self, address: u16, data: u8) -> bool {
-        unimplemented!()
+        if address >= 0x0000u16 && address <= 0x1FFFu16 {
+            return true;
+        }
+        return false;
     }
 }
