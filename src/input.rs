@@ -3,14 +3,41 @@ use minifb::Key;
 use std::rc::Rc;
 use rand::distributions::uniform::SampleBorrow;
 use std::cell::RefCell;
+use std::borrow::Borrow;
 
-pub struct Input {
+pub struct Controllers {
     reading_button: u8,
     provider: Rc<dyn InputProvider>,
 }
 
+impl Controllers {
+    pub fn new(input_provider: Rc<dyn InputProvider>) -> Self {
+        return Controllers {
+            reading_button: 0,
+            provider: input_provider,
+        }
+    }
+
+    pub fn write(&mut self, address: u16, data: u8) {
+        if address == 0x4016 {
+            let strobe = (data & 0x01) == 01;
+            if strobe {
+                self.reading_button = 0;
+            }
+        }
+    }
+
+    pub fn read(&mut self, address: u16, data: &mut u8) {
+        *data = *data & 0xF8;
+        let provider: &dyn InputProvider = self.provider.borrow();
+        *data = *data | if provider.get_button_state(self.reading_button, 0) { 0x01 } else { 0x00 };
+        self.reading_button += 1;
+        //println!("probing controller, reply={}", *data);
+    }
+}
+
 pub trait InputProvider {
-    fn get_button_state(&self, button: u8, controller: u8) -> bool ;
+    fn get_button_state(&self, button: u8, controller: u8) -> bool;
 }
 
 impl InputProvider for RefCell<MainWindow> {

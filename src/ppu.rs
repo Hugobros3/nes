@@ -158,11 +158,11 @@ impl Ppu {
                         data = self.ppu_data_buffer;
                     }
 
-                    let vprev = self.vram_addr.val;
-                    println!("read ppureg prev {}", vprev);
+                    //let vprev = self.vram_addr.val;
+                    //println!("read ppureg prev {}", vprev);
                     self.vram_addr.val = self.vram_addr.val + (if self.control.increment_mode() == 1 { 32 } else { 1 });
-                    let vpost = self.vram_addr.val;
-                    println!("read ppureg post {}", vpost);
+                    //let vpost = self.vram_addr.val;
+                    //println!("read ppureg post {}", vpost);
                 }
             }
             _ => panic!("Unreachable")
@@ -210,11 +210,11 @@ impl Ppu {
             }
             0x0007 => { // PPU data
                 self.ppu_write(bus, self.vram_addr.val, data);
-                let vprev = self.vram_addr.val;
-                println!("write ppureg prev {}", vprev);
+                //let vprev = self.vram_addr.val;
+                //println!("write ppureg prev {}", vprev);
                 self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
-                let vpost = self.vram_addr.val;
-                println!("write ppureg post {}", vpost);
+                //let vpost = self.vram_addr.val;
+                //println!("write ppureg post {}", vpost);
             }
             _ => panic!("Unreachable")
         }
@@ -254,7 +254,7 @@ impl Ppu {
 
     pub fn ppu_write(&mut self, bus: &Bus, address: u16, data: u8) {
         let address = address & 0x3FFFu16;
-        println!("write ppu add={} d={} vb={}", address, data, self.status.vertical_blank());
+        //println!("write ppu add={} d={} vb={}", address, data, self.status.vertical_blank());
 
         let mut cart_brw = bus.cartdrige.borrow_mut();
         let cart_ref = cart_brw.as_mut();
@@ -270,7 +270,7 @@ impl Ppu {
                 MirroringMode::FourScreen => { quadrant }
             };
 
-            println!("pattern tbl {}, {}, {}, {}", address, tlb_bank, quadrant, data);
+            //println!("pattern tbl {}, {}, {}, {}", address, tlb_bank, quadrant, data);
             if STRIKES.fetch_add(1, Ordering::Acquire) > 5 {
             //    panic!("STOP");
             }

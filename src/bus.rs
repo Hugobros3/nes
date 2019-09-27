@@ -4,23 +4,26 @@ use crate::ppu::{Ppu, PpuOutput};
 use crate::cartdrige::Cartdrige;
 use std::borrow::BorrowMut;
 use std::rc::Rc;
+use crate::input::{Controllers, InputProvider};
 
 pub struct Bus {
     pub cpu: RefCell<Cpu>,
     pub cpu_ram: RefCell<[u8; 2048]>,
     pub ppu: RefCell<Ppu>,
     pub cartdrige: RefCell<Option<Box<dyn Cartdrige>>>,
+    pub controllers: RefCell<Controllers>,
 
     pub master_clock_counter: u64,
 }
 
 impl Bus where {
-    pub fn new(output: Rc<dyn PpuOutput>) -> Self {
+    pub fn new(input_provider: Rc<dyn InputProvider>, graphical_output: Rc<dyn PpuOutput>) -> Self {
         let mut bus = Bus {
             cpu: RefCell::new(Cpu::new()),
             cpu_ram: RefCell::new([0; 2048]),
-            ppu: RefCell::new(Ppu::new(output)),
+            ppu: RefCell::new(Ppu::new(graphical_output)),
             cartdrige: RefCell::new(Option::None),
+            controllers: RefCell::new(Controllers::new(input_provider)),
 
             master_clock_counter: 0,
         };
@@ -44,6 +47,8 @@ impl Bus where {
             data = self.cpu_ram.borrow()[(address & 0x07FF) as usize]
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
             data = self.ppu.borrow_mut().read_ppu_register(self, address & 0x0007, read_only);
+        } else if address >= 0x4016 && address <= 0x4017 {
+            self.controllers.borrow_mut().read(address, &mut data);
         }
 
         return data;
@@ -62,6 +67,8 @@ impl Bus where {
             //println!("write ok {}, {}", address, data);
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
             self.ppu.borrow_mut().write_ppu_register(self, address & 0x0007, data);
+        } else if address >= 0x4016 && address <= 0x4017 {
+            self.controllers.borrow_mut().write(address, data);
         }
     }
 
@@ -76,21 +83,21 @@ impl Bus where {
         }
 
         let do_ppu_nmi =
-        {
-            let mut ppu = self.ppu.borrow_mut();//.borrow_mut();
-            if ppu.send_nmi {
-                ppu.send_nmi = false;
-                true
-            } else {
-                false
-            }
-        };
+            {
+                let mut ppu = self.ppu.borrow_mut();//.borrow_mut();
+                if ppu.send_nmi {
+                    ppu.send_nmi = false;
+                    true
+                } else {
+                    false
+                }
+            };
         if do_ppu_nmi {
             println!("nmi!");
             self.cpu.borrow_mut().nmi(self);
         }
 
-        self.master_clock_counter+=1;
+        self.master_clock_counter += 1;
     }
 
     pub fn reset(&mut self) {
