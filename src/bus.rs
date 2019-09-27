@@ -86,6 +86,7 @@ impl Bus where {
             }
         };
         if do_ppu_nmi {
+            println!("nmi!");
             self.cpu.borrow_mut().nmi(self);
         }
 

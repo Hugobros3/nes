@@ -59,13 +59,13 @@ impl PatternsDebugWindow {
                 let palette_rgb = get_colour_from_palette_ram(bus.ppu.borrow().borrow(), bus, 0, indexed_color);
                 self.buffer[(y as usize * width + x as usize)] = pack(palette_rgb.0, palette_rgb.1, palette_rgb.2);
                 //TODO use real palettes
-                let color = match (indexed_color) {
+                /*let color = match (indexed_color) {
                     0 => Color(0.0, 0.0, 0.0),
                     1 => Color(1.0, 0.0, 0.0),
                     2 => Color(0.0, 1.0, 0.0),
                     _ => Color(0.0, 0.0, 1.0),
                 };
-                self.buffer[(y as usize * width + x as usize)] = rgb(&color);
+                self.buffer[(y as usize * width + x as usize)] = rgb(&color);*/
             }
         }
         self.window.update_with_buffer(self.buffer.as_slice()).unwrap();

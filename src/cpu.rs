@@ -30,19 +30,6 @@ bf!(CpuStateFlags[u8] {
     N: 7:7
 });
 
-/*bitflags! {
-    pub struct CpuStateFlags: u8 {
-        const C = 0b00000001; // Carry
-        const Z = 0b00000010; // Zero
-        const I = 0b00000100; // Disable interrupts
-        const D = 0b00001000; // BCD (unused)
-        const B = 0b00010000; // Break
-        const U = 0b00100000; // Unused
-        const V = 0b01000000; // Overflow
-        const N = 0b10000000; // Negative
-    }
-}*/
-
 impl Cpu {
     pub(crate) fn new() -> Self {
         return Cpu {
@@ -62,6 +49,7 @@ impl Cpu {
             // Fetch instruction
             let fetching_from = self.pc;
             let opcode = bus.cpu_read(self.pc, false);
+            self.flags.set_U(1);
             self.pc += 1;
             let instruction = &INSTRUCTIONS[opcode as usize];
 
@@ -73,12 +61,13 @@ impl Cpu {
             let addressing_result = addressing_mode_implementation(self, bus);
 
             let hex_pc = hex::encode(fetching_from.to_be_bytes());
-            println!("{} {} {:?}", hex_pc.as_str(), instruction.name, self);
+            //println!("{} {} {:?}", hex_pc.as_str(), instruction.name, self);
 
             // Execute actual instruction
             let instruction_implementation = instruction.implementation;
             instruction_implementation(self, bus, instruction, &addressing_result);
 
+            self.flags.set_U(1);
         }
 
         self.rem_cycles -= 1;
@@ -101,46 +90,44 @@ impl Cpu {
         self.rem_cycles = 8;
     }
 
-    fn irq(bus: &Bus) {
-        let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
+    fn irq(&mut self, bus: &Bus) {
+        if self.flags.I() == 0 {
+            bus.cpu_write(0x0100 + self.stack_pointer as u16, (self.pc >> 8) as u8);
+            self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+            bus.cpu_write(0x0100 + self.stack_pointer as u16, (self.pc & 0x00FFu16) as u8);
+            self.stack_pointer = self.stack_pointer.wrapping_sub(1);
 
-        if cpu.flags.I() == 0 {
-            bus.cpu_write(0x0100 + cpu.stack_pointer as u16, (cpu.pc >> 8) as u8);
-            cpu.stack_pointer -= 1;
-            bus.cpu_write(0x0100 + cpu.stack_pointer as u16, (cpu.pc & 0x00FFu16) as u8);
-            cpu.stack_pointer -= 1;
-
-            cpu.flags.set_B(0);
-            cpu.flags.set_U(1);
-            cpu.flags.set_I(1);
+            self.flags.set_B(0);
+            self.flags.set_U(1);
+            self.flags.set_I(1);
             //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
             //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
             //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
-            bus.cpu_write(0x0100 + cpu.stack_pointer as u16, cpu.flags.val);
-            cpu.stack_pointer -= 1;
+            bus.cpu_write(0x0100 + self.stack_pointer as u16, self.flags.val);
+            self.stack_pointer = self.stack_pointer.wrapping_sub(1);
 
             let interrupt_vector = 0xFFFEu16;
             let lo = bus.cpu_read(interrupt_vector, false) as u16;
             let hi = bus.cpu_read(interrupt_vector + 1, false) as u16;
 
-            cpu.pc = (hi << 8) | lo;
+            self.pc = (hi << 8) | lo;
 
-            cpu.rem_cycles = 7;
+            self.rem_cycles = 7;
         }
     }
 
     pub fn nmi(&mut self, bus: &Bus) {
         //let cpu: &mut Cpu = &mut bus.cpu.borrow_mut();
         bus.cpu_write(0x0100 + self.stack_pointer as u16, (self.pc >> 8) as u8);
-        self.stack_pointer -= 1;
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
         bus.cpu_write(0x0100 + self.stack_pointer as u16, (self.pc & 0x00FFu16) as u8);
-        self.stack_pointer -= 1;
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
 
         self.flags.set_B(0);
         self.flags.set_U(1);
         self.flags.set_I(1);
         bus.cpu_write(0x0100 + self.stack_pointer as u16, self.flags.val);
-        self.stack_pointer -= 1;
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
 
         let interrupt_vector = 0xFFFAu16;
         let lo = bus.cpu_read(interrupt_vector, false) as u16;

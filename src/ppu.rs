@@ -3,6 +3,8 @@ use crate::main;
 use crate::ines_loader::MirroringMode;
 use crate::ppu::palette::get_colour_from_palette_ram;
 use std::rc::Rc;
+use std::fmt::Debug;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod main_window;
 pub mod patterns_debug_viewer;
@@ -82,6 +84,8 @@ pub struct Ppu where {
     output: Rc<dyn PpuOutput>,
 }
 
+static STRIKES: AtomicUsize = AtomicUsize::new(0);
+
 impl Ppu {
     pub fn new(output: Rc<dyn PpuOutput>) -> Self {
         return Ppu {
@@ -130,10 +134,9 @@ impl Ppu {
                 }
             }
             0x0002 => { // Status
-                if (read_only) {
+                if read_only {
                     data = self.status.val;
                 } else {
-                    //self.status.set_vertical_blank(1);
                     data = (self.status.val & 0xE0) | (self.ppu_data_buffer & 0x1F);
                     self.status.set_vertical_blank(0);
                     self.address_latch = 0;
@@ -150,11 +153,16 @@ impl Ppu {
             0x0007 => { // PPU data
                 if !read_only {
                     data = self.ppu_data_buffer;
-                    self.ppu_data_buffer = self.ppu_read(bus, address, read_only);
+                    self.ppu_data_buffer = self.ppu_read(bus, self.vram_addr.val, read_only);
                     if self.vram_addr.val >= 0x3F00 {
                         data = self.ppu_data_buffer;
                     }
-                    self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
+
+                    let vprev = self.vram_addr.val;
+                    println!("read ppureg prev {}", vprev);
+                    self.vram_addr.val = self.vram_addr.val + (if self.control.increment_mode() == 1 { 32 } else { 1 });
+                    let vpost = self.vram_addr.val;
+                    println!("read ppureg post {}", vpost);
                 }
             }
             _ => panic!("Unreachable")
@@ -182,11 +190,11 @@ impl Ppu {
             0x0005 => { // Scroll
                 if self.address_latch == 0 {
                     self.fine_x = data & 0x07;
-                    self.tram_addr.set_coarse_x((data >> 3) as u16);
+                    self.tram_addr.set_coarse_x(((data >> 3) as u16));
                     self.address_latch = 1;
                 } else {
                     self.tram_addr.set_fine_y((data & 0x07) as u16);
-                    self.tram_addr.set_coarse_y((data >> 3) as u16);
+                    self.tram_addr.set_coarse_y(((data >> 3) as u16));
                     self.address_latch = 0;
                 }
             }
@@ -196,13 +204,17 @@ impl Ppu {
                     self.address_latch = 1;
                 } else {
                     self.tram_addr.val = (self.tram_addr.val & 0xFF00) | (data as u16);
-                    self.vram_addr = self.tram_addr;
+                    self.vram_addr.val = self.tram_addr.val;
                     self.address_latch = 0;
                 }
             }
             0x0007 => { // PPU data
                 self.ppu_write(bus, self.vram_addr.val, data);
+                let vprev = self.vram_addr.val;
+                println!("write ppureg prev {}", vprev);
                 self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
+                let vpost = self.vram_addr.val;
+                println!("write ppureg post {}", vpost);
             }
             _ => panic!("Unreachable")
         }
@@ -214,8 +226,7 @@ impl Ppu {
 
         let mut cart_brw = bus.cartdrige.borrow_mut();
 
-        if cart_brw.is_some() && cart_brw.as_mut().unwrap().ppu_read(address, &mut data) {}
-        else if address >= 0x2000u16 && address <= 0x3EFF {
+        if cart_brw.is_some() && cart_brw.as_mut().unwrap().ppu_read(address, &mut data) {} else if address >= 0x2000u16 && address <= 0x3EFF {
             let address = address & 0x0FFF;
             let quadrant = address >> 10;
 
@@ -243,11 +254,11 @@ impl Ppu {
 
     pub fn ppu_write(&mut self, bus: &Bus, address: u16, data: u8) {
         let address = address & 0x3FFFu16;
+        println!("write ppu add={} d={} vb={}", address, data, self.status.vertical_blank());
 
         let mut cart_brw = bus.cartdrige.borrow_mut();
         let cart_ref = cart_brw.as_mut();
-        if cart_ref.is_some() && cart_ref.unwrap().ppu_write(address, data) {}
-        else if address >= 0x2000u16 && address <= 0x3EFF {
+        if cart_ref.is_some() && cart_ref.unwrap().ppu_write(address, data) {} else if address >= 0x2000u16 && address <= 0x3EFF {
             let address = address & 0x0FFF;
             let quadrant = address >> 10;
 
@@ -259,7 +270,11 @@ impl Ppu {
                 MirroringMode::FourScreen => { quadrant }
             };
 
-            //println!("write ppu data {}, {}, {}, {}", address, tlb_bank, quadrant, data);
+            println!("pattern tbl {}, {}, {}, {}", address, tlb_bank, quadrant, data);
+            if STRIKES.fetch_add(1, Ordering::Acquire) > 5 {
+            //    panic!("STOP");
+            }
+            //panic!("stop");
 
             self.nametables[tlb_bank as usize][(address & 0x03FF) as usize] = data;
         } else if address >= 0x3F00u16 && address <= 0x3FFF {
@@ -278,9 +293,9 @@ impl Ppu {
             if self.vram_addr.coarse_x() == 31 {
                 self.vram_addr.set_coarse_x(0);
                 self.vram_addr.set_nametable_x(1 - self.vram_addr.nametable_x());
+            } else {
+                self.vram_addr.set_coarse_x(self.vram_addr.coarse_x() + 1);
             }
-        } else {
-            self.vram_addr.set_coarse_x(self.vram_addr.coarse_x() + 1);
         }
     }
 
@@ -365,7 +380,7 @@ impl Ppu {
                         self.bg_next_tile_id = self.ppu_read(bus, 0x2000 | (self.vram_addr.val & 0x0FFF), false);
                     }
                     2 => {
-                        let mut attrib = self.ppu_read(bus, 0x23C0 | (self.vram_addr.nametable_y() << 11) | (self.vram_addr.nametable_x() << 10) | ((self.vram_addr.coarse_y() << 2) << 3) | (self.vram_addr.coarse_x() >> 2), false);
+                        let mut attrib = self.ppu_read(bus, 0x23C0 | (self.vram_addr.nametable_y() << 11) | (self.vram_addr.nametable_x() << 10) | ((self.vram_addr.coarse_y() >> 2) << 3) | (self.vram_addr.coarse_x() >> 2), false);
                         if (self.vram_addr.coarse_y() & 0x02) != 0 {
                             attrib >>= 4;
                         }
@@ -375,10 +390,10 @@ impl Ppu {
                         self.bg_next_tile_attrib = attrib & 0x03;
                     }
                     4 => {
-                        self.bg_next_tile_lsb = self.ppu_read(bus, ((self.control.pattern_background() as u16) << 12) as u16 + (self.bg_next_tile_id << 4) as u16 + self.vram_addr.fine_y() + 0, false);
+                        self.bg_next_tile_lsb = self.ppu_read(bus, ((self.control.pattern_background() as u16) << 12) as u16 + ((self.bg_next_tile_id as u16) << 4) + self.vram_addr.fine_y() + 0, false);
                     }
                     6 => {
-                        self.bg_next_tile_msb = self.ppu_read(bus, ((self.control.pattern_background() as u16) << 12) as u16 + (self.bg_next_tile_id << 4) as u16 + self.vram_addr.fine_y() + 8, false);
+                        self.bg_next_tile_msb = self.ppu_read(bus, ((self.control.pattern_background() as u16) << 12) as u16 + ((self.bg_next_tile_id as u16) << 4) + self.vram_addr.fine_y() + 8, false);
                     }
                     7 => {
                         self.increment_scroll_x();
@@ -427,21 +442,22 @@ impl Ppu {
 
             let p0_pixel = ((self.bg_shifter_pattern_lo & bit_mux) > 0) as u8;
             let p1_pixel = ((self.bg_shifter_pattern_hi & bit_mux) > 0) as u8;
-            let bg_pixel = (p1_pixel << 1) | p0_pixel;
+            bg_pixel = (p1_pixel << 1) | p0_pixel;
 
             let bg_pal0 = ((self.bg_shifter_attrib_lo & bit_mux) > 0) as u8;
             let bg_pal1 = ((self.bg_shifter_attrib_hi & bit_mux) > 0) as u8;
-            let bg_palette = (bg_pal1 << 1) | bg_pal0;
+            bg_palette = (bg_pal1 << 1) | bg_pal0;
         }
 
         //TODO actual output :)
         let color = get_colour_from_palette_ram(self, bus, bg_palette, bg_pixel);
-        /*let color = match (bg_pixel) {
+        let color2 = match (bg_pixel) {
             0 => (0, 0, 255),
             1 => (255, 0, 0),
             2 => (0, 255, 0),
             _ => (0, 0, 255),
-        };*/
+        };
+        //let color = (rand::random::<u8>(),rand::random::<u8>(),rand::random::<u8>());
         self.output.set_pixel((self.cycle - 1) as i32, self.scanline as i32, color);
 
         self.cycle += 1;
@@ -453,6 +469,8 @@ impl Ppu {
                 self.frame_complete = true;
             }
         }
+
+        //println!("ppu clock: {} {:?}", self.vram_addr.val, self.mask);
     }
 
     pub fn reset(&mut self, bus: &Bus) {
@@ -480,5 +498,5 @@ impl Ppu {
 }
 
 pub trait PpuOutput {
-    fn set_pixel(& self, x: i32, y: i32, rgb: (u8, u8, u8));
+    fn set_pixel(&self, x: i32, y: i32, rgb: (u8, u8, u8));
 }

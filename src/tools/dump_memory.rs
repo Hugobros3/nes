@@ -10,13 +10,13 @@ pub fn dump_memory_contents(nes: &Bus, filename: &str) {
     let to = 0x10000u32;
 
     while at < to {
-        let bytes_per_line = 8;
+        let bytes_per_line = 16;
         let mut line = String::new();
         line.push('$');
         let line_hex = hex::encode((at as u16).to_be_bytes());
         line.push_str(line_hex.as_str());
 
-        let bytes_per_group = 4;
+        let bytes_per_group = 1;
         let mut group = 0;
         while group < bytes_per_line / bytes_per_group {
             line.push(' ');
@@ -44,13 +44,13 @@ pub fn dump_visual_memory_contents(nes: &Bus, filename: &str) {
     let ppu = nes.ppu.borrow_mut();
 
     while at < to {
-        let bytes_per_line = 8;
+        let bytes_per_line = 16;
         let mut line = String::new();
         line.push('$');
         let line_hex = hex::encode((at as u16).to_be_bytes());
         line.push_str(line_hex.as_str());
 
-        let bytes_per_group = 4;
+        let bytes_per_group = 1;
         let mut group = 0;
         while group < bytes_per_line / bytes_per_group {
             line.push(' ');
@@ -61,9 +61,28 @@ pub fn dump_visual_memory_contents(nes: &Bus, filename: &str) {
             group += 1;
         }
 
+        line.push(':');
+        line.push(' ');
+
+        let bytes_per_group = 1;
+        let mut group = 0;
+        while group < bytes_per_line / bytes_per_group {
+            for i in 0 .. bytes_per_group {
+                let memory_contents = ppu.ppu_read(nes, (at as u16) + ((group * bytes_per_group) as u16) + (i as u16), true);
+                let mut chr = memory_contents as char;
+                if !(memory_contents >= 0x20 && memory_contents <= 0x7e) || !memory_contents.is_ascii() || memory_contents == 0 {
+                    chr = '.';
+                }
+                line.push(chr);
+            }
+            group += 1;
+        }
+
         line.push('\n');
         writer.write(line.as_bytes());
 
         at += bytes_per_line;
     }
+
+    writer.flush();
 }
