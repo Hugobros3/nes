@@ -168,7 +168,7 @@ fn am_indexed_indirect(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 
 /// Fetches a pointer, fetches the address from it, *then* adds y to it.
 fn am_indirect_indexed(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
-    let mut ptr = bus.cpu_read(cpu.pc, false) as u16;
+    let ptr = bus.cpu_read(cpu.pc, false) as u16;
     cpu.pc+=1;
 
     let address_lo = bus.cpu_read(ptr & 0x00FF, false);
@@ -180,7 +180,7 @@ fn am_indirect_indexed(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
     let og_page = address >> 8;
     let offseted_page = offseted_address >> 8;
 
-    let additional_cycles = if(og_page != offseted_page) { 1 } else { 0 };
+    let additional_cycles = if og_page != offseted_page { 1 } else { 0 };
 
     return AddressingResult::ReadFrom { address: offseted_address, cycles: additional_cycles }
 }
@@ -203,8 +203,6 @@ fn am_relative(cpu: &mut Cpu, bus: &Bus) -> AddressingResult {
 impl AddressingResult {
     // Will fetch data - Cannot be called for relative addressing
     pub fn fetch(&self, cpu: &mut Cpu, bus: &Bus) -> u8 {
-        //let am_implementation = self.implementation;
-        //let what_to_fetch = am_implementation(cpu, bus);
         match self {
             AddressingResult::Implicit { data } => {
                 return *data;
@@ -220,8 +218,6 @@ impl AddressingResult {
 
     /// Returns relative addressing offset - Can only be called for relative addressing
     pub fn offset_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        //let am_implementation = self.implementation;
-        //let where_to_fetch = am_implementation(cpu, bus);
         match self {
             AddressingResult::ProgramCounterRelative { address_rel } => {
                 return *address_rel;
@@ -232,27 +228,10 @@ impl AddressingResult {
         }
     }
 
-    /// Will compute relative address - Can only be called for relative addressing
-    pub fn address_rel(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        //let am_implementation = self.implementation;
-        //let where_to_fetch = am_implementation(cpu, bus);
-        match self {
-            AddressingResult::ProgramCounterRelative { address_rel } => {
-                let t = cpu.pc.wrapping_add(*address_rel);
-                return t;
-            }
-            _ => {
-                panic!("Expected a (PC) relative address")
-            }
-        }
-    }
-
     /// Will compute absolute address - Can only be called for non-immediate, non-REL addressing modes
     pub fn address(&self, cpu: &mut Cpu, bus: &Bus) -> u16 {
-        //let am_implementation = self.implementation;
-        //let where_to_fetch = am_implementation(cpu, bus);
         match self {
-            AddressingResult::ReadFrom { address, cycles } => {
+            AddressingResult::ReadFrom { address, cycles: _ } => {
                 return *address;
             },
             _ => {

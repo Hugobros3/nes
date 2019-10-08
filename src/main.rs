@@ -3,9 +3,6 @@ extern crate bitutils;
 
 use crate::bus::Bus;
 
-use std::str::*;
-use std::slice::*;
-use crate::cpu::Cpu;
 use crate::ines_loader::load_rom_file_as_cartdrige;
 use crate::ppu::patterns_debug_viewer::PatternsDebugWindow;
 use crate::tools::{dump_memory_contents, dump_visual_memory_contents};
@@ -22,8 +19,8 @@ mod ppu;
 mod input;
 mod cartdrige;
 
-mod ines_loader;
 mod mappers;
+mod ines_loader;
 
 mod tools;
 

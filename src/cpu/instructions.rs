@@ -355,7 +355,7 @@ fn BEQ(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &
 }
 
 // Branch if not equal
-fn BNE(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
+fn BNE(cpu: &mut Cpu, bus: &Bus, _instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
     if cpu.flags.Z() == 0 {
         cpu.rem_cycles += 1;
 
@@ -374,7 +374,7 @@ fn BNE(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &
 }
 
 // Branch if negative (N set)
-fn BMI(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
+fn BMI(cpu: &mut Cpu, bus: &Bus, _instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
     if cpu.flags.N() == 1 {
         cpu.rem_cycles += 1;
 
@@ -393,7 +393,7 @@ fn BMI(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &
 }
 
 // Branch if positive (N not set)
-fn BPL(cpu: &mut Cpu, bus: &Bus, instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
+fn BPL(cpu: &mut Cpu, bus: &Bus, _instruction: &Instruction, addressing_result: &AddressingResult) -> i8 {
     if cpu.flags.N() == 0 {
         cpu.rem_cycles += 1;
 

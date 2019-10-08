@@ -2,7 +2,6 @@ use crate::cpu::Cpu;
 use std::cell::RefCell;
 use crate::ppu::{Ppu, PpuOutput};
 use crate::cartdrige::Cartdrige;
-use std::borrow::BorrowMut;
 use std::rc::Rc;
 use crate::input::{Controllers, InputProvider};
 
