@@ -95,6 +95,8 @@ pub struct Ppu where {
     scanline_sprites_count: u8,
     sprite_shifter_pattern_lo: [u8; 8],
     sprite_shifter_pattern_hi: [u8; 8],
+    sprite_zero_selected: bool,
+    sprite_zero_rendering: bool,
 
     pub send_nmi: bool,
 
@@ -135,6 +137,8 @@ impl Ppu {
             scanline_sprites_count: 0,
             sprite_shifter_pattern_lo: [0; 8],
             sprite_shifter_pattern_hi: [0; 8],
+            sprite_zero_selected: true,
+            sprite_zero_rendering: true,
 
             send_nmi: false,
 
@@ -404,6 +408,7 @@ impl Ppu {
             if self.scanline == -1 && self.cycle == 1 {
                 self.status.set_vertical_blank(0);
 
+                self.status.set_sprite_zero_hit(0);
                 self.status.set_sprite_overflow(0);
                 self.sprite_shifter_pattern_lo.iter_mut().for_each(|a| { *a = 0; });
                 self.sprite_shifter_pattern_hi.iter_mut().for_each(|a| { *a = 0; });
@@ -463,6 +468,7 @@ impl Ppu {
             if self.cycle == 257 && self.scanline >= 0 {
                 self.scanline_sprites.iter_mut().for_each(|it| { it.set_y(0xff); });
                 self.scanline_sprites_count = 0;
+                self.sprite_zero_selected = false;
 
                 for i in 0..64 {
                     if self.scanline_sprites_count == 9 {
@@ -472,6 +478,10 @@ impl Ppu {
                     let diff = self.scanline - ((self.oam[i].y() as u16) as i16);
                     if diff >= 0 && diff < (if self.control.sprite_size() != 0 { 16 } else { 8 }) {
                         if self.scanline_sprites_count < 8 {
+                            if i == 0 {
+                                self.sprite_zero_selected = true;
+                            }
+
                             self.scanline_sprites[self.scanline_sprites_count as usize] = self.oam[i];
 
                             //???
@@ -577,6 +587,8 @@ impl Ppu {
         let mut fg_palette = 0u8;
         let mut fg_priority = 0u8;
 
+        let mut sprite_zero_rendering = false;
+
         if self.mask.render_sprites() != 0 {
             for i in 0..self.scanline_sprites_count {
                 let sprite = &self.scanline_sprites[i as usize];
@@ -590,6 +602,10 @@ impl Ppu {
                     fg_priority = ((sprite.attribute() & 0x20) == 0) as u8;
 
                     if fg_pixel != 0 {
+                        if i == 0 {
+                            sprite_zero_rendering = true;
+                        }
+
                         break;
                     }
                 }
@@ -616,6 +632,20 @@ impl Ppu {
             } else {
                 final_pixel = bg_pixel;
                 final_palette = bg_palette;
+            }
+
+            if self.sprite_zero_selected && sprite_zero_rendering {
+                if (self.mask.render_sprites() != 0) && (self.mask.render_background() != 0) {
+                    if !((self.mask.render_background_left() != 0) || (self.mask.render_sprites_left() != 0)) {
+                        if self.cycle >= 9 && self.cycle < 258 {
+                            self.status.set_sprite_zero_hit(1);
+                        }
+                    } else {
+                        if self.cycle >= 1 && self.cycle < 258 {
+                            self.status.set_sprite_zero_hit(1);
+                        }
+                    }
+                }
             }
         }
 
