@@ -5,6 +5,7 @@ use crate::ppu::palette::get_colour_from_palette_ram;
 use std::rc::Rc;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::borrow::BorrowMut;
 
 pub mod main_window;
 pub mod patterns_debug_viewer;
@@ -50,9 +51,17 @@ bf!(Loopy[u16] {
     unused: 15:15,
 });
 
+bf!(OAMEntry[u32] {
+    y: 0:7,
+    id: 8:15,
+    attribute: 16:23,
+    x: 24:31,
+});
+
 pub struct Ppu where {
     nametables: [[u8; 1024]; 2],
     palette: [u8; 32],
+    oam: [OAMEntry; 64],
 
     pub frame_complete: bool,
 
@@ -80,6 +89,8 @@ pub struct Ppu where {
     bg_shifter_attrib_lo: u16,
     bg_shifter_attrib_hi: u16,
 
+    oam_addr: u8,
+
     pub send_nmi: bool,
 
     output: Rc<dyn PpuOutput>,
@@ -90,6 +101,7 @@ impl Ppu {
         return Ppu {
             nametables: [[0u8; 1024]; 2],
             palette: [0; 32],
+            oam: [OAMEntry::new(0);64],
 
             frame_complete: false,
 
@@ -113,10 +125,19 @@ impl Ppu {
             bg_shifter_attrib_lo: 0,
             bg_shifter_attrib_hi: 0,
 
+            oam_addr: 0,
+
             send_nmi: false,
 
             output,
         };
+    }
+
+    pub fn borrow_oam_raw(&mut self) -> &mut [u8] {
+        unsafe {
+            let slice = self.oam.borrow_mut();
+            return std::mem::transmute::<&mut [OAMEntry;64], &mut [u8;256]>(slice);
+        }
     }
 
     pub fn read_ppu_register(&mut self, bus: &Bus, address: u16, read_only: bool) -> u8 {
@@ -144,6 +165,8 @@ impl Ppu {
             0x0003 => { // OAM address
             }
             0x0004 => { // OAM data
+                let addr = self.oam_addr as usize;
+                data = self.borrow_oam_raw()[addr];
             }
             0x0005 => { // Scroll
             }
@@ -178,8 +201,11 @@ impl Ppu {
             0x0002 => { // Status
             }
             0x0003 => { // OAM address
+                self.oam_addr = data;
             }
             0x0004 => { // OAM data
+                let addr = self.oam_addr as usize;
+                self.borrow_oam_raw()[addr] = data;
             }
             0x0005 => { // Scroll
                 if self.address_latch == 0 {

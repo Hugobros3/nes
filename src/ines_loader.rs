@@ -76,7 +76,7 @@ fn read_header(reader: &mut BufReader<File>) -> INesHeaderInfo {
     };
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum MirroringMode {
     Horizontal,
     Vertical,

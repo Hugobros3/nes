@@ -13,6 +13,29 @@ pub struct Bus {
     pub controllers: RefCell<Controllers>,
 
     pub master_clock_counter: u64,
+
+    dma: RefCell<Dma>,
+}
+
+struct Dma {
+    dma_page: u8,
+    dma_addr: u8,
+    dma_data: u8,
+    is_doing_dma: bool,
+    dma_dummy: bool,
+}
+
+impl Dma {
+    fn new() -> Self {
+        Self {
+            dma_page: 0,
+            dma_addr: 0,
+            dma_data: 0,
+
+            is_doing_dma: false,
+            dma_dummy: true,
+        }
+    }
 }
 
 impl Bus where {
@@ -25,6 +48,8 @@ impl Bus where {
             controllers: RefCell::new(Controllers::new(input_provider)),
 
             master_clock_counter: 0,
+
+            dma: RefCell::new(Dma::new()),
         };
 
         bus.reset();
@@ -66,6 +91,11 @@ impl Bus where {
             //println!("write ok {}, {}", address, data);
         } else if address >= 0x2000u16 && address < 0x3FFFu16 {
             self.ppu.borrow_mut().write_ppu_register(self, address & 0x0007, data);
+        } else if address == 0x4014 {
+            let mut dma = self.dma.borrow_mut();
+            dma.dma_page = data;
+            dma.dma_addr = data;
+            dma.is_doing_dma = true;
         } else if address >= 0x4016 && address <= 0x4017 {
             self.controllers.borrow_mut().write(address, data);
         }
@@ -78,19 +108,39 @@ impl Bus where {
     pub fn clock(&mut self) {
         self.ppu.borrow_mut().clock(self);
         if self.master_clock_counter % 3 == 0 {
-            self.cpu.borrow_mut().clock(self);
+            if self.dma.borrow().is_doing_dma {
+                let mut dma = self.dma.borrow_mut();
+                if dma.dma_dummy {
+                    if self.master_clock_counter % 2 == 1 {
+                        dma.dma_dummy = false;
+                    }
+                } else {
+                    if self.master_clock_counter % 2 == 0 {
+                        dma.dma_data = self.cpu_read((dma.dma_page as u16) << 8 | dma.dma_addr as u16, false);
+                    } else {
+                        self.ppu.borrow_mut().borrow_oam_raw()[dma.dma_addr as usize] = dma.dma_data;
+                        dma.dma_addr = dma.dma_addr.wrapping_add(1);
+
+                        if dma.dma_addr == 0 {
+                            dma.dma_dummy = true;
+                            dma.is_doing_dma = false;
+                        }
+                    }
+                }
+            } else {
+                self.cpu.borrow_mut().clock(self);
+            }
         }
 
-        let do_ppu_nmi =
-            {
-                let mut ppu = self.ppu.borrow_mut();//.borrow_mut();
-                if ppu.send_nmi {
-                    ppu.send_nmi = false;
-                    true
-                } else {
-                    false
-                }
-            };
+        let do_ppu_nmi = {
+            let mut ppu = self.ppu.borrow_mut();//.borrow_mut();
+            if ppu.send_nmi {
+                ppu.send_nmi = false;
+                true
+            } else {
+                false
+            }
+        };
         if do_ppu_nmi {
             //println!("nmi!");
             self.cpu.borrow_mut().nmi(self);

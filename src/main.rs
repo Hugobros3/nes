@@ -32,7 +32,7 @@ fn main() {
         Rc::clone(&main_window) as Rc<dyn PpuOutput>,
     );
 
-    let cartdrige = load_rom_file_as_cartdrige("roms/ic.nes");
+    let cartdrige = load_rom_file_as_cartdrige("roms/smb.nes");
     nes.load_cartdrige(cartdrige);
     nes.reset();
 
