@@ -9,6 +9,6 @@ Plan: kill two birds with one stone: get moar rust experience, and accomplish a 
 
 ## Status
 
-Ep4 of the series complete, renders the background layer with some glitches. 
+Ep5 of the series complete, you can play mario !
 
 Passes nestest (except for illegal instructions).

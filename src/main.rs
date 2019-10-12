@@ -47,7 +47,7 @@ fn main() {
             while !nes.ppu.borrow().frame_complete {
                 nes.clock();
             }
-            println!("frame {}", nes.master_clock_counter - instr_prev);
+            //println!("frame {}", nes.master_clock_counter - instr_prev);
             nes.ppu.borrow_mut().frame_complete = false;
             pattern_debug_window.update(&nes);
             nametable_debug_window.update(&nes);

@@ -8,7 +8,9 @@ edition = "2018"
 
 [dependencies]
 hex = "0.3.1"
-imgui = "0.2.1"
 minifb = "0.13.0"
 bitutils = "3.0.0"
 rand = "0.7.2"
+
+[profile.release]
+debug = true
