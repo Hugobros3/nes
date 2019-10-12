@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod main_window;
 pub mod patterns_debug_viewer;
+pub mod nametables_debug_viewer;
 mod palette;
 mod window_common;
 
@@ -42,11 +43,11 @@ bf!(Control[u8] {
 
 bf!(Loopy[u16] {
     coarse_x: 0:4,
-    coarse_y: 5:10,
-    nametable_x: 11:11,
-    nametable_y: 12:12,
-    fine_y: 13:15,
-    unused: 16:16,
+    coarse_y: 5:9,
+    nametable_x: 10:10,
+    nametable_y: 11:11,
+    fine_y: 12:14,
+    unused: 15:15,
 });
 
 pub struct Ppu where {
@@ -83,8 +84,6 @@ pub struct Ppu where {
 
     output: Rc<dyn PpuOutput>,
 }
-
-static STRIKES: AtomicUsize = AtomicUsize::new(0);
 
 impl Ppu {
     pub fn new(output: Rc<dyn PpuOutput>) -> Self {
@@ -157,12 +156,7 @@ impl Ppu {
                     if self.vram_addr.val >= 0x3F00 {
                         data = self.ppu_data_buffer;
                     }
-
-                    //let vprev = self.vram_addr.val;
-                    //println!("read ppureg prev {}", vprev);
                     self.vram_addr.val = self.vram_addr.val + (if self.control.increment_mode() == 1 { 32 } else { 1 });
-                    //let vpost = self.vram_addr.val;
-                    //println!("read ppureg post {}", vpost);
                 }
             }
             _ => panic!("Unreachable")
@@ -210,11 +204,7 @@ impl Ppu {
             }
             0x0007 => { // PPU data
                 self.ppu_write(bus, self.vram_addr.val, data);
-                //let vprev = self.vram_addr.val;
-                //println!("write ppureg prev {}", vprev);
                 self.vram_addr.val += (if self.control.increment_mode() == 1 { 32 } else { 1 });
-                //let vpost = self.vram_addr.val;
-                //println!("write ppureg post {}", vpost);
             }
             _ => panic!("Unreachable")
         }
@@ -234,8 +224,8 @@ impl Ppu {
 
             //TODO it doesn't work like that in actuality, emulate relevant cartdrige port lines ( CIRAM/CE CIRAM A10 )
             let tlb_bank = match mirroring {
-                MirroringMode::Horizontal => { quadrant % 2 }
-                MirroringMode::Vertical => { quadrant / 2 }
+                MirroringMode::Horizontal => { quadrant / 2 }
+                MirroringMode::Vertical => { quadrant % 2 }
                 MirroringMode::FourScreen => { quadrant }
             };
 
@@ -265,16 +255,10 @@ impl Ppu {
             let mirroring = if cart_brw.is_some() { cart_brw.as_mut().unwrap().get_info().mirroring_mode } else { MirroringMode::Horizontal };
 
             let tlb_bank = match mirroring {
-                MirroringMode::Horizontal => { quadrant % 2 }
-                MirroringMode::Vertical => { quadrant / 2 }
+                MirroringMode::Horizontal => { quadrant / 2 }
+                MirroringMode::Vertical => { quadrant % 2 }
                 MirroringMode::FourScreen => { quadrant }
             };
-
-            //println!("pattern tbl {}, {}, {}, {}", address, tlb_bank, quadrant, data);
-            if STRIKES.fetch_add(1, Ordering::Acquire) > 5 {
-            //    panic!("STOP");
-            }
-            //panic!("stop");
 
             self.nametables[tlb_bank as usize][(address & 0x03FF) as usize] = data;
         } else if address >= 0x3F00u16 && address <= 0x3FFF {
@@ -283,7 +267,7 @@ impl Ppu {
             if address == 0x0014 { address = 0x0004; }
             if address == 0x0018 { address = 0x0008; }
             if address == 0x001C { address = 0x000C; }
-            println!("write to palette {}, {}", address, data);
+            //println!("write to palette {}, {}", address, data);
             self.palette[address as usize] = data;
         }
     }
@@ -309,7 +293,9 @@ impl Ppu {
                 match self.vram_addr.coarse_y() {
                     29 => {
                         self.vram_addr.set_coarse_y(0);
+                        let pre = self.vram_addr.nametable_y();
                         self.vram_addr.set_nametable_y(1 - self.vram_addr.nametable_y());
+                        //println!("pre {} post {}", pre, self.vram_addr.nametable_y());
                     }
                     31 => {
                         self.vram_addr.set_coarse_y(0);
@@ -416,7 +402,7 @@ impl Ppu {
                 self.bg_next_tile_id = self.ppu_read(bus, 0x2000 | (self.vram_addr.val & 0x0FFF), false);
             }
 
-            if self.scanline == -1 && self.cycle >= 280 && self.cycle <= 305 {
+            if self.scanline == -1 && self.cycle >= 280 && self.cycle < 305 {
                 self.transfer_address_y();
             }
         }
@@ -451,13 +437,6 @@ impl Ppu {
 
         //TODO actual output :)
         let color = get_colour_from_palette_ram(self, bus, bg_palette, bg_pixel);
-        let color2 = match (bg_pixel) {
-            0 => (0, 0, 255),
-            1 => (255, 0, 0),
-            2 => (0, 255, 0),
-            _ => (0, 0, 255),
-        };
-        //let color = (rand::random::<u8>(),rand::random::<u8>(),rand::random::<u8>());
         self.output.set_pixel((self.cycle - 1) as i32, self.scanline as i32, color);
 
         self.cycle += 1;
@@ -469,8 +448,6 @@ impl Ppu {
                 self.frame_complete = true;
             }
         }
-
-        //println!("ppu clock: {} {:?}", self.vram_addr.val, self.mask);
     }
 
     pub fn reset(&mut self, bus: &Bus) {
