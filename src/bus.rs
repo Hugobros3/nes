@@ -94,7 +94,7 @@ impl Bus where {
         } else if address == 0x4014 {
             let mut dma = self.dma.borrow_mut();
             dma.dma_page = data;
-            dma.dma_addr = data;
+            dma.dma_addr = 0x00;
             dma.is_doing_dma = true;
         } else if address >= 0x4016 && address <= 0x4017 {
             self.controllers.borrow_mut().write(address, data);

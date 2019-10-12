@@ -32,7 +32,7 @@ fn main() {
         Rc::clone(&main_window) as Rc<dyn PpuOutput>,
     );
 
-    let cartdrige = load_rom_file_as_cartdrige("roms/smb.nes");
+    let cartdrige = load_rom_file_as_cartdrige("roms/ic.nes");
     nes.load_cartdrige(cartdrige);
     nes.reset();
 
@@ -47,7 +47,7 @@ fn main() {
             while !nes.ppu.borrow().frame_complete {
                 nes.clock();
             }
-            //println!("frame {}", nes.master_clock_counter - instr_prev);
+            println!("frame {}", nes.master_clock_counter - instr_prev);
             nes.ppu.borrow_mut().frame_complete = false;
             pattern_debug_window.update(&nes);
             nametable_debug_window.update(&nes);

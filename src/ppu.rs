@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::borrow::BorrowMut;
+use rand::Rng;
 
 pub mod main_window;
 pub mod patterns_debug_viewer;
@@ -90,6 +91,10 @@ pub struct Ppu where {
     bg_shifter_attrib_hi: u16,
 
     oam_addr: u8,
+    scanline_sprites: [OAMEntry; 8],
+    scanline_sprites_count: u8,
+    sprite_shifter_pattern_lo: [u8; 8],
+    sprite_shifter_pattern_hi: [u8; 8],
 
     pub send_nmi: bool,
 
@@ -101,7 +106,7 @@ impl Ppu {
         return Ppu {
             nametables: [[0u8; 1024]; 2],
             palette: [0; 32],
-            oam: [OAMEntry::new(0);64],
+            oam: [OAMEntry::new(0); 64],
 
             frame_complete: false,
 
@@ -126,6 +131,10 @@ impl Ppu {
             bg_shifter_attrib_hi: 0,
 
             oam_addr: 0,
+            scanline_sprites: [OAMEntry::new(0); 8],
+            scanline_sprites_count: 0,
+            sprite_shifter_pattern_lo: [0; 8],
+            sprite_shifter_pattern_hi: [0; 8],
 
             send_nmi: false,
 
@@ -136,7 +145,7 @@ impl Ppu {
     pub fn borrow_oam_raw(&mut self) -> &mut [u8] {
         unsafe {
             let slice = self.oam.borrow_mut();
-            return std::mem::transmute::<&mut [OAMEntry;64], &mut [u8;256]>(slice);
+            return std::mem::transmute::<&mut [OAMEntry; 64], &mut [u8; 256]>(slice);
         }
     }
 
@@ -369,6 +378,20 @@ impl Ppu {
             self.bg_shifter_attrib_lo <<= 1;
             self.bg_shifter_attrib_hi <<= 1;
         }
+
+        if self.mask.render_sprites() != 0 && self.cycle >= 1 && self.cycle < 258 {
+            for i in 0..self.scanline_sprites_count {
+                let mut sprite = &mut self.scanline_sprites[i as usize];
+                if sprite.x() > 0 {
+                    sprite.set_x(sprite.x() - 1);
+                } else {
+                    self.sprite_shifter_pattern_lo[i as usize] <<= 1;
+                    self.sprite_shifter_pattern_hi[i as usize] <<= 1;
+                }
+            }
+            //self.sprite_shifter_pattern_lo.iter_mut().for_each( | p | { *p <<= 1; } );
+            //self.sprite_shifter_pattern_hi.iter_mut().for_each( | p | { *p <<= 1; } );
+        }
     }
 
     pub fn clock(&mut self, bus: &Bus) {
@@ -380,6 +403,10 @@ impl Ppu {
 
             if self.scanline == -1 && self.cycle == 1 {
                 self.status.set_vertical_blank(0);
+
+                self.status.set_sprite_overflow(0);
+                self.sprite_shifter_pattern_lo.iter_mut().for_each(|a| { *a = 0; });
+                self.sprite_shifter_pattern_hi.iter_mut().for_each(|a| { *a = 0; });
             }
 
             // TODO this is NTSC timings but I want PAL
@@ -431,6 +458,91 @@ impl Ppu {
             if self.scanline == -1 && self.cycle >= 280 && self.cycle < 305 {
                 self.transfer_address_y();
             }
+
+            // Sprite evaluation
+            if self.cycle == 257 && self.scanline >= 0 {
+                self.scanline_sprites.iter_mut().for_each(|it| { it.set_y(0xff); });
+                self.scanline_sprites_count = 0;
+
+                for i in 0..64 {
+                    if self.scanline_sprites_count == 9 {
+                        break;
+                    }
+
+                    let diff = self.scanline - ((self.oam[i].y() as u16) as i16);
+                    if diff >= 0 && diff < (if self.control.sprite_size() != 0 { 16 } else { 8 }) {
+                        if self.scanline_sprites_count < 8 {
+                            self.scanline_sprites[self.scanline_sprites_count as usize] = self.oam[i];
+
+                            //???
+                            self.scanline_sprites_count += 1;
+                        }
+                    }
+                }
+
+                self.status.set_sprite_overflow((self.scanline_sprites_count > 8) as u8);
+            }
+
+            // Sprite shifter population
+            if self.cycle == 340 {
+                for i in 0..self.scanline_sprites_count {
+                    let sprite_pattern_addr_lo: u16;
+                    let sprite_pattern_addr_hi: u16;
+
+                    let sprite: &OAMEntry = &self.scanline_sprites[i as usize];
+                    let vertical_flip = sprite.attribute() & 0x80 != 0;
+                    let horizontal_flip = sprite.attribute() & 0x40 != 0;
+
+                    let relative_y = (self.scanline - (sprite.y() as u16) as i16) as u16;
+
+                    if self.control.sprite_size() == 0 {
+                        // 8x8 sprites
+
+                        if !vertical_flip {
+                            sprite_pattern_addr_lo = ((self.control.pattern_sprite() as u16) << 12) | ((sprite.id() as u16) << 4) | relative_y;
+                        } else {
+                            sprite_pattern_addr_lo = ((self.control.pattern_sprite() as u16) << 12) | ((sprite.id() as u16) << 4) | 7 - relative_y;
+                        }
+                    } else {
+                        // 8x16 sprites
+
+                        if !vertical_flip {
+                            if relative_y < 8 {
+                                sprite_pattern_addr_lo = (((sprite.id() as u16) & 0x01) << 12) | (((sprite.id() as u8 & 0x0FE) as u16) << 4) | relative_y & 7;
+                            } else {
+                                sprite_pattern_addr_lo = (((sprite.id() as u16) & 0x01) << 12) | ((((sprite.id() as u8 & 0x0FE) + 1) as u16) << 4) | relative_y & 7;
+                            }
+                        } else {
+                            if relative_y < 8 {
+                                sprite_pattern_addr_lo = (((sprite.id() as u16) & 0x01) << 12) | ((((sprite.id() as u8 & 0x0FE) + 1) as u16) << 4) | 7 - relative_y & 7;
+                            } else {
+                                sprite_pattern_addr_lo = (((sprite.id() as u16) & 0x01) << 12) | (((sprite.id() as u8 & 0x0FE) as u16) << 4) | 7 - relative_y & 7;
+                            }
+                        }
+                    }
+
+                    sprite_pattern_addr_hi = sprite_pattern_addr_lo + 8;
+
+                    let sprite_pattern_bits_lo: u8 = self.ppu_read(bus, sprite_pattern_addr_lo, false);
+                    let sprite_pattern_bits_hi: u8 = self.ppu_read(bus, sprite_pattern_addr_hi, false);
+
+                    fn flip(byte: u8) -> u8 {
+                        let mut byte = byte;
+                        byte = (byte & 0xF0) >> 4 | (byte & 0x0F) << 4;
+                        byte = (byte & 0xCC) >> 2 | (byte & 0x33) << 2;
+                        byte = (byte & 0xAA) >> 1 | (byte & 0x55) << 1;
+                        byte
+                    }
+
+                    if horizontal_flip {
+                        self.sprite_shifter_pattern_lo[i as usize] = flip(sprite_pattern_bits_lo);
+                        self.sprite_shifter_pattern_hi[i as usize] = flip(sprite_pattern_bits_hi);
+                    } else {
+                        self.sprite_shifter_pattern_lo[i as usize] = sprite_pattern_bits_lo;
+                        self.sprite_shifter_pattern_hi[i as usize] = sprite_pattern_bits_hi;
+                    }
+                }
+            }
         }
 
         if self.scanline == 240 {
@@ -461,8 +573,53 @@ impl Ppu {
             bg_palette = (bg_pal1 << 1) | bg_pal0;
         }
 
-        //TODO actual output :)
-        let color = get_colour_from_palette_ram(self, bus, bg_palette, bg_pixel);
+        let mut fg_pixel = 0u8;
+        let mut fg_palette = 0u8;
+        let mut fg_priority = 0u8;
+
+        if self.mask.render_sprites() != 0 {
+            for i in 0..self.scanline_sprites_count {
+                let sprite = &self.scanline_sprites[i as usize];
+
+                if sprite.x() == 0 {
+                    let fg_pixel_lo = ((self.sprite_shifter_pattern_lo[i as usize] & 0x80) > 0) as u8;
+                    let fg_pixel_hi = ((self.sprite_shifter_pattern_hi[i as usize] & 0x80) > 0) as u8;
+                    fg_pixel = (fg_pixel_hi << 1) | fg_pixel_lo;
+
+                    fg_palette = (sprite.attribute() & 0x03) as u8 + 0x04;
+                    fg_priority = ((sprite.attribute() & 0x20) == 0) as u8;
+
+                    if fg_pixel != 0 {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Combine bg & fg
+        let final_pixel: u8;
+        let final_palette: u8;
+
+        if bg_pixel == 0 && fg_pixel == 0 {
+            final_pixel = 0;
+            final_palette = 0;
+        } else if bg_pixel == 0 && fg_pixel > 0 {
+            final_pixel = fg_pixel;
+            final_palette = fg_palette;
+        } else if bg_pixel > 0 && fg_pixel == 0 {
+            final_pixel = bg_pixel;
+            final_palette = bg_palette;
+        } else {
+            if fg_priority != 0 {
+                final_pixel = fg_pixel;
+                final_palette = fg_palette;
+            } else {
+                final_pixel = bg_pixel;
+                final_palette = bg_palette;
+            }
+        }
+
+        let color = get_colour_from_palette_ram(self, bus, final_palette, final_pixel);
         self.output.set_pixel((self.cycle - 1) as i32, self.scanline as i32, color);
 
         self.cycle += 1;
