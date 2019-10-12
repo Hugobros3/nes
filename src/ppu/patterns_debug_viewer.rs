@@ -20,7 +20,7 @@ impl PatternsDebugWindow {
             ..WindowOptions::default()
         };
         let mut window = Window::new("Pattern tables", width as usize, height as usize, options).unwrap_or_else(|e| { panic!("{}", e); });
-        return PatternsDebugWindow {
+        return Self {
             window,
             buffer
         };

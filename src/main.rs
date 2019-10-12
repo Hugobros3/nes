@@ -12,6 +12,7 @@ use std::rc::Rc;
 use crate::ppu::PpuOutput;
 use std::env;
 use crate::input::InputProvider;
+use crate::ppu::nametables_debug_viewer::NametableDebugWindow;
 
 mod bus;
 mod cpu;
@@ -31,7 +32,7 @@ fn main() {
         Rc::clone(&main_window) as Rc<dyn PpuOutput>,
     );
 
-    let cartdrige = load_rom_file_as_cartdrige("roms/nestest.nes");
+    let cartdrige = load_rom_file_as_cartdrige("roms/ic.nes");
     nes.load_cartdrige(cartdrige);
     nes.reset();
 
@@ -39,14 +40,17 @@ fn main() {
     println!("{:?}", args.next());
     if args.next().is_none() {
         let mut pattern_debug_window = PatternsDebugWindow::new();
+        let mut nametable_debug_window = NametableDebugWindow::new();
+
         while pattern_debug_window.window.is_open() && main_window.borrow().window.is_open() {
             let instr_prev = nes.master_clock_counter;
             while !nes.ppu.borrow().frame_complete {
                 nes.clock();
             }
-            println!("frame {}", nes.master_clock_counter - instr_prev);
+            //println!("frame {}", nes.master_clock_counter - instr_prev);
             nes.ppu.borrow_mut().frame_complete = false;
             pattern_debug_window.update(&nes);
+            nametable_debug_window.update(&nes);
 
             main_window.borrow_mut().refresh();
         }
