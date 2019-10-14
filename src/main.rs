@@ -10,12 +10,12 @@ use crate::ppu::main_window::MainWindow;
 use std::cell::RefCell;
 use std::rc::Rc;
 use crate::ppu::PpuOutput;
+use crate::apu::streaming_audio::{launch_sound, garbage_test};
 use std::env;
 use crate::input::InputProvider;
 use crate::ppu::nametables_debug_viewer::NametableDebugWindow;
 use std::time::{Instant, Duration};
 use std::ops::Sub;
-use crate::apu::test_sound;
 
 mod bus;
 mod cpu;
@@ -31,6 +31,8 @@ mod tools;
 
 fn main() {
     //test_sound();
+    let mut audio_tx = launch_sound();
+    //garbage_test(&mut audio_tx);
 
     let mut args = env::args();
 
@@ -38,6 +40,7 @@ fn main() {
     let mut nes = Bus::new(
         Rc::clone(&main_window) as Rc<dyn InputProvider>,
         Rc::clone(&main_window) as Rc<dyn PpuOutput>,
+        audio_tx
     );
 
     let cartdrige = load_rom_file_as_cartdrige("roms/smb.nes");
@@ -61,6 +64,9 @@ fn main() {
             while !nes.ppu.borrow().frame_complete {
                 nes.clock();
             }
+            nes.apu.borrow_mut().frame_done();
+            //println!("{}", nes.master_clock_counter - instr_prev);
+
             nes.ppu.borrow_mut().frame_complete = false;
             pattern_debug_window.update(&nes);
             nametable_debug_window.update(&nes);

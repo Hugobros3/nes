@@ -5,6 +5,8 @@ use crate::cartdrige::Cartdrige;
 use std::rc::Rc;
 use crate::input::{Controllers, InputProvider};
 use crate::apu::Apu;
+use std::sync::mpsc::SyncSender;
+use crate::apu::streaming_audio::FrameSoundBuffer;
 
 pub struct Bus {
     pub cpu: RefCell<Cpu>,
@@ -41,12 +43,12 @@ impl Dma {
 }
 
 impl Bus where {
-    pub fn new(input_provider: Rc<dyn InputProvider>, graphical_output: Rc<dyn PpuOutput>) -> Self {
+    pub fn new(input_provider: Rc<dyn InputProvider>, graphical_output: Rc<dyn PpuOutput>, audio_output: SyncSender<FrameSoundBuffer>) -> Self {
         let mut bus = Bus {
             cpu: RefCell::new(Cpu::new()),
             cpu_ram: RefCell::new([0; 2048]),
             ppu: RefCell::new(Ppu::new(graphical_output)),
-            apu: RefCell::new(Apu::new()),
+            apu: RefCell::new(Apu::new(audio_output)),
             cartdrige: RefCell::new(Option::None),
             controllers: RefCell::new(Controllers::new(input_provider)),
 

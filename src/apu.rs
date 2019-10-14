@@ -1,75 +1,8 @@
-use cpal::traits::{DeviceTrait, EventLoopTrait, HostTrait};
-use cpal::{StreamData, UnknownTypeOutputBuffer};
 use crate::bus::Bus;
+use std::sync::mpsc::SyncSender;
+use crate::apu::streaming_audio::FrameSoundBuffer;
 
-pub fn test_sound() {
-    let host = cpal::default_host();
-    let event_loop = host.event_loop();
-
-    let device = host.default_output_device().expect("no output device available");
-
-    let mut supported_formats_range = device.supported_output_formats()
-        .expect("error while querying formats");
-    let format = supported_formats_range.next()
-        .expect("no supported format?!")
-        .with_max_sample_rate();
-
-    let stream_id = event_loop.build_output_stream(&device, &format).unwrap();
-    event_loop.play_stream(stream_id).expect("failed to play_stream");
-
-    let sample_rate = format.sample_rate.0 as f32;
-    let mut sample_clock = 0f32;
-
-    println!("{}", format.sample_rate.0);
-
-    // Produce a sinusoid of maximum amplitude.
-    let mut next_value = || {
-        sample_clock = (sample_clock + 1.0) % sample_rate;
-        //rand::random::<f32>()
-        //if ((sample_clock * (440.0) / sample_rate) % 1.0) < 0.45 + 0.05 * rand::random::<f32>() { 1.0 } else { 0.0 }
-        //(sample_clock * 440.0 * 2.0 * 3.141592 / sample_rate).sin()
-        (sample_clock / sample_rate < 0.20) as i32 as f32 * if ((sample_clock * (440.0) / sample_rate) % 1.0) < 0.5 { 1.0 } else { 0.0 }
-    };
-
-    event_loop.run(move |stream_id, stream_result| {
-        let stream_data = match stream_result {
-            Ok(data) => data,
-            Err(err) => {
-                eprintln!("an error occurred on stream {:?}: {}", stream_id, err);
-                return;
-            }
-            _ => return,
-        };
-
-        match stream_data {
-            cpal::StreamData::Output { buffer: cpal::UnknownTypeOutputBuffer::U16(mut buffer) } => {
-                for sample in buffer.chunks_mut(format.channels as usize) {
-                    let value = ((next_value() * 0.5 + 0.5) * std::u16::MAX as f32) as u16;
-                    for out in sample.iter_mut() {
-                        *out = value;
-                    }
-                }
-            }
-            cpal::StreamData::Output { buffer: cpal::UnknownTypeOutputBuffer::I16(mut buffer) } => {
-                for sample in buffer.chunks_mut(format.channels as usize) {
-                    let value = (next_value() * std::i16::MAX as f32) as i16;
-                    for out in sample.iter_mut() {
-                        *out = value;
-                    }
-                }
-            }
-            cpal::StreamData::Output { buffer: cpal::UnknownTypeOutputBuffer::F32(mut buffer) } => {
-                for sample in buffer.chunks_mut(format.channels as usize) {
-                    let value = next_value();
-                    for out in sample.iter_mut() {
-                        *out = value;
-                    }
-                }
-            }
-            _ => (),
-        }
-    });
-}
+pub mod streaming_audio;
 
 // Square voices registers
 bf!(SquareVoiceReg1[u8] {
@@ -203,10 +136,13 @@ pub struct Apu {
     sequencer_counter: u8,
     sequencer_divider: u32,
     sequencer_interrupt_flag: bool,
+
+    audio_output: SyncSender<FrameSoundBuffer>,
+    audio_buffer: Vec<u8>,
 }
 
 impl Apu {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(audio_output: SyncSender<FrameSoundBuffer>) -> Self {
         Self {
             cpu_clock_divider: 0,
 
@@ -252,6 +188,9 @@ impl Apu {
             sequencer_counter: 0,
             sequencer_divider: 0,
             sequencer_interrupt_flag: false,
+
+            audio_output,
+            audio_buffer: Vec::<u8>::with_capacity(14_900),
         }
     }
 
@@ -401,7 +340,7 @@ impl Apu {
         let mut dac_output = true;
         if square1_period < 8 || square1_shifter_result > 0x7FF {
             dac_output = false;
-        } else if self.square1_2.enable_sweep() == 1 &&  self.square1_2.shift() != 0 {
+        } else if self.square1_2.enable_sweep() == 1 && self.square1_2.shift() != 0 {
             self.square1_period_low = ((square1_shifter_result & 0xFF) as u8);
             self.square1_4.set_period_high(((square1_shifter_result >> 8) & 0xFF) as u8);
         }
@@ -455,30 +394,60 @@ impl Apu {
 
     pub fn clock_cpu_clock(&mut self) {
         self.cpu_clock_divider += 1;
-        if self.cpu_clock_divider == 0 {
-            return;
-        } else {
+        if self.cpu_clock_divider == 2 {
             self.cpu_clock_divider = 0;
+
+            let square1_period = ((self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8)) + 1;
+            self.square1_timer += 1;
+            if self.square1_timer == square1_period {
+                self.square1_timer = 0;
+                self.square1_sequencer = (self.square1_sequencer + 1) % 8;
+            }
         }
 
-        let square1_period = ((self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8)) + 1;
-        self.square1_timer += 1;
-        if self.square1_timer == square1_period {
-            self.square1_timer = 0;
 
-            let sequence = self.square1_sequencer;
-            self.square1_sequencer = (self.square1_sequencer + 1) % 8;
-            let waveform = SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize];
-
-            let output = self.square1_volume_out_of_envelope * (self.square1_sweep_output as u8);
-            //println!("{}",output);
-        }
+        let sequence = self.square1_sequencer;
+        let waveform = ((((SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize] >> sequence) & 0x01) != 0) as u8) * 8;
+        let output = self.square1_volume_out_of_envelope * (self.square1_sweep_output as u8) * waveform;
+        self.audio_buffer.push(output);
 
         //TODO other channels
     }
+
+    pub fn frame_done(&mut self) {
+        let mut swap = Vec::<u8>::with_capacity(14_900);
+        let downsample_me = std::mem::replace(&mut self.audio_buffer, swap);
+
+        let sample_length = downsample_me.len();
+
+        let mut bytes_req = 800;
+        let mut fvec = Vec::<u8>::new();
+        for i in 0..bytes_req {
+            let next = i + 1;
+            let mut start = (((sample_length as f32 / bytes_req as f32) * (i as f32)) as usize);
+            let mut end = (((sample_length as f32 / bytes_req as f32) * (next as f32)) as usize);
+            if start > sample_length {
+                start = sample_length - 1;
+            }
+            if end > sample_length {
+                end = sample_length - 1;
+            }
+            let size = end - start;
+            assert_ne!(size, 0);
+            let mut acc = 0.0f32;
+            for sample_index in start..end {
+                acc += downsample_me[sample_index] as f32;
+            }
+            acc /= size as f32;
+
+            fvec.push(acc as u8);
+        }
+
+        self.audio_output.send(fvec);
+    }
 }
 
-const SQUARE_WAVEFORM_SEQUENCES: [u8;4] = [
+const SQUARE_WAVEFORM_SEQUENCES: [u8; 4] = [
     0b0100_0000,
     0b0110_0000,
     0b0111_1000,
