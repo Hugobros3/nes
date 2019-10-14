@@ -4,11 +4,13 @@ use crate::ppu::{Ppu, PpuOutput};
 use crate::cartdrige::Cartdrige;
 use std::rc::Rc;
 use crate::input::{Controllers, InputProvider};
+use crate::apu::Apu;
 
 pub struct Bus {
     pub cpu: RefCell<Cpu>,
     pub cpu_ram: RefCell<[u8; 2048]>,
     pub ppu: RefCell<Ppu>,
+    pub apu: RefCell<Apu>,
     pub cartdrige: RefCell<Option<Box<dyn Cartdrige>>>,
     pub controllers: RefCell<Controllers>,
 
@@ -44,6 +46,7 @@ impl Bus where {
             cpu: RefCell::new(Cpu::new()),
             cpu_ram: RefCell::new([0; 2048]),
             ppu: RefCell::new(Ppu::new(graphical_output)),
+            apu: RefCell::new(Apu::new()),
             cartdrige: RefCell::new(Option::None),
             controllers: RefCell::new(Controllers::new(input_provider)),
 
@@ -73,6 +76,8 @@ impl Bus where {
             data = self.ppu.borrow_mut().read_ppu_register(self, address & 0x0007, read_only);
         } else if address >= 0x4016 && address <= 0x4017 {
             self.controllers.borrow_mut().read(address, &mut data);
+        } else if address == 0x4015 {
+            self.apu.borrow_mut().cpu_read(address, &mut data);
         }
 
         return data;
@@ -96,8 +101,10 @@ impl Bus where {
             dma.dma_page = data;
             dma.dma_addr = 0x00;
             dma.is_doing_dma = true;
-        } else if address >= 0x4016 && address <= 0x4017 {
+        } else if address == 0x4016 {
             self.controllers.borrow_mut().write(address, data);
+        } else if address >= 0x4000 && address <= 0x4017 {
+            self.apu.borrow_mut().cpu_write(self, address, data);
         }
     }
 
@@ -130,6 +137,9 @@ impl Bus where {
             } else {
                 self.cpu.borrow_mut().clock(self);
             }
+
+            self.apu.borrow_mut().clock_main(12);
+            self.apu.borrow_mut().clock_cpu_clock();
         }
 
         let do_ppu_nmi = {

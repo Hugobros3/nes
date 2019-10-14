@@ -73,9 +73,11 @@ pub fn test_sound() {
 
 // Square voices registers
 bf!(SquareVoiceReg1[u8] {
-    volume_env_period: 0:3,
-    env_disable: 4:4,
-    env_disable_length: 5:5,
+    volume: 0:3,
+    envelope_period: 0:3,
+    envelope_disable: 4:4,
+    loop_envelope: 5:5,
+    halt: 5:5,
     duty: 6:7,
 });
 bf!(SquareVoiceReg2[u8] {
@@ -85,7 +87,6 @@ bf!(SquareVoiceReg2[u8] {
     enable_sweep: 7:7,
 });
 bf!(SquareVoiceReg3[u8] {
-    period_low: 0:7,
 });
 bf!(SquareVoiceReg4[u8] {
     period_high: 0:2,
@@ -110,6 +111,7 @@ bf!(NoiseVoiceReg1[u8] {
     vol_env_period: 0:3,
     env_disable: 4:4,
     loop_env_disable_length: 5:5,
+    halt: 5:5,
     unused: 6:7,
 });
 bf!(NoiseVoiceReg2[u8] {
@@ -123,20 +125,20 @@ bf!(NoiseVoiceReg3[u8] {
 });
 
 // DMC registers
-bf!(DMCReg1[u8] {
+bf!(DmcReg1[u8] {
     frequency_index: 0:3,
     unused: 4:5,
     do_loop: 6:6,
     irq_enable: 7:7,
 });
-bf!(DMCReg2[u8] {
+bf!(DmcReg2[u8] {
     dac: 0:6,
     unused: 7:7,
 });
-bf!(DMCReg3[u8] {
+bf!(DmcReg3[u8] {
     sample_address: 0:7,
 });
-bf!(DMCReg4[u8] {
+bf!(DmcReg4[u8] {
     sample_length: 0:7,
 });
 
@@ -156,34 +158,172 @@ bf!(CommonReg2[u8] {
 });
 
 pub struct Apu {
-    irq_disable: bool,
-    frame_sequencer_mode: bool,
+    cpu_clock_divider: u8,
+
+    square1_1: SquareVoiceReg1,
+    square1_2: SquareVoiceReg2,
+    square1_period_low: u8,
+    square1_4: SquareVoiceReg4,
+    square1_length_counter: u16,
+    square1_envelope_counter: u8,
+    square1_envelope_divider: u8,
+    square1_envelope_reset: bool,
+    square1_volume_out_of_envelope: u8,
+    square1_timer: u16,
+    square1_sweep_divider: u8,
+    square1_sweep_reset: bool,
+    square1_sweep_output: bool,
+    square1_sequencer: u8,
+
+    square2_1: SquareVoiceReg1,
+    square2_2: SquareVoiceReg2,
+    square2_3: SquareVoiceReg3,
+    square2_4: SquareVoiceReg4,
+    square2_length_counter: u16,
+
+    triangle_1: TriangleVoiceReg1,
+    triangle_2: TriangleVoiceReg2,
+    triangle_3: TriangleVoiceReg3,
+    triangle_length_counter: u16,
+
+    noise_1: NoiseVoiceReg1,
+    noise_2: NoiseVoiceReg2,
+    noise_3: NoiseVoiceReg3,
+    noise_length_counter: u16,
+
+    dmc_1: DmcReg1,
+    dmc_2: DmcReg2,
+    dmc_3: DmcReg3,
+    dmc_4: DmcReg4,
+    dmc_irq: bool,
+
+    common1: CommonReg1,
+    common2: CommonReg2,
+
     sequencer_counter: u8,
     sequencer_divider: u32,
     sequencer_interrupt_flag: bool,
 }
 
 impl Apu {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            irq_disable: false,
-            frame_sequencer_mode: false,
+            cpu_clock_divider: 0,
+
+            square1_1: SquareVoiceReg1::new(0),
+            square1_2: SquareVoiceReg2::new(0),
+            square1_period_low: 0,
+            square1_4: SquareVoiceReg4::new(0),
+            square1_length_counter: 0,
+            square1_envelope_counter: 0,
+            square1_envelope_divider: 0,
+            square1_envelope_reset: false,
+            square1_volume_out_of_envelope: 0,
+            square1_timer: 0,
+            square1_sweep_divider: 0,
+            square1_sweep_reset: false,
+            square1_sweep_output: false,
+            square1_sequencer: 0,
+
+            square2_1: SquareVoiceReg1::new(0),
+            square2_2: SquareVoiceReg2::new(0),
+            square2_3: SquareVoiceReg3::new(0),
+            square2_4: SquareVoiceReg4::new(0),
+            square2_length_counter: 0,
+
+            triangle_1: TriangleVoiceReg1::new(0),
+            triangle_2: TriangleVoiceReg2::new(0),
+            triangle_3: TriangleVoiceReg3::new(0),
+            triangle_length_counter: 0,
+
+            noise_1: NoiseVoiceReg1::new(0),
+            noise_2: NoiseVoiceReg2::new(0),
+            noise_3: NoiseVoiceReg3::new(0),
+            noise_length_counter: 0,
+
+            dmc_1: DmcReg1::new(0),
+            dmc_2: DmcReg2::new(0),
+            dmc_3: DmcReg3::new(0),
+            dmc_4: DmcReg4::new(0),
+            dmc_irq: false,
+
+            common1: CommonReg1::new(0),
+            common2: CommonReg2::new(0),
             sequencer_counter: 0,
             sequencer_divider: 0,
             sequencer_interrupt_flag: false,
         }
     }
 
-    fn cpu_write(&mut self, bus: &Bus, address: u16, data: u8) {
+    pub fn cpu_write(&mut self, bus: &Bus, address: u16, data: u8) {
         match address {
+            // Square 1
+            0x4000 => { self.square1_1.val = data; }
+            0x4001 => {
+                self.square1_2.val = data;
+                self.square1_sweep_reset = true;
+            }
+            0x4002 => { self.square1_period_low = data; }
+            0x4003 => {
+                self.square1_4.val = data;
+                // Write to 4th register triggers length counter reset
+                if self.common1.length_ctr_enable_pulse_1() != 0 {
+                    let length_key = self.square1_4.length_index();
+                    self.square1_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
+                }
+                self.square1_envelope_reset = true;
+                self.square1_sequencer = 0;
+            }
+            // Square 2
+            0x4004 => { self.square2_1.val = data; }
+            0x4005 => { self.square2_2.val = data; }
+            0x4006 => { self.square2_3.val = data; }
+            0x4007 => {
+                self.square2_4.val = data;
+                // Write to 4th register triggers length counter reset
+                if self.common1.length_ctr_enable_pulse_2() != 0 {
+                    let length_key = self.square2_4.length_index();
+                    self.square2_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
+                }
+            }
+            // Triangle
+            0x4008 => { self.triangle_1.val = data; }
+            //0x4009: nothing
+            0x400A => { self.triangle_2.val = data; }
+            0x400B => {
+                self.triangle_3.val = data;
+                // Write to 4th register triggers length counter reset
+                if self.common1.length_ctr_enable_triangle() != 0 {
+                    let length_key = self.triangle_3.length_index();
+                    self.triangle_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
+                }
+            }
+            // Noise channel
+            0x400C => { self.noise_1.val = data; }
+            //0x400D: nothing
+            0x400E => { self.noise_2.val = data; }
+            0x400F => { self.noise_3.val = data; }
+            // DPCM
+            0x4010 => { self.dmc_1.val = data; }
+            0x4011 => { self.dmc_2.val = data; }
+            0x4012 => { self.dmc_3.val = data; }
+            0x4013 => { self.dmc_4.val = data; }
+            // Control
+            0x4015 => {
+                self.common1.val = data;
+
+                self.dmc_irq = false;
+                //TODO DMC behavior
+                //If d is set and the DMC's DMA reader has no more sample bytes to fetch, the DMC
+                //sample is restarted. If d is clear then the DMA reader's sample bytes remaining
+                //is set to 0.
+            }
             0x4017 => {
-                // Reset divider & sequencer
-                self.frame_sequencer_mode = data & 0x80 != 0;
-                self.irq_disable = data & 0x40 != 0;
+                self.common2.val = data;
                 self.sequencer_counter = 0;
                 self.sequencer_divider = 0;
 
-                if (self.frame_sequencer_mode) {
+                if self.common2.frame_sequencer_mode() != 0 {
                     self.clock_sequencer();
                 }
             }
@@ -191,7 +331,20 @@ impl Apu {
         }
     }
 
-    fn clock_main(&mut self, cycles: u32) {
+    pub fn cpu_read(&mut self, address: u16, data: &mut u8) {
+        if address == 0x4015 {
+            *data = ((self.dmc_irq as u8) << 7) |
+                ((self.sequencer_interrupt_flag as u8) << 6) |
+                /*(((self.dmc_sample_bytes_remaining > 0) as u8) << 4) | */
+                (((self.noise_length_counter > 0) as u8) << 3) |
+                (((self.triangle_length_counter > 0) as u8) << 2) |
+                (((self.square2_length_counter > 0) as u8) << 1);
+
+            self.sequencer_interrupt_flag = false;
+        }
+    }
+
+    pub fn clock_main(&mut self, cycles: u32) {
         self.sequencer_divider += cycles;
         if self.sequencer_divider >= 89490 {
             self.sequencer_divider -= 89490;
@@ -200,9 +353,9 @@ impl Apu {
     }
 
     fn clock_sequencer(&mut self) {
-        if !(self.frame_sequencer_mode) {
+        if self.common2.frame_sequencer_mode() == 0 {
             // mode 0
-            if self.sequencer_counter == 3 && !self.irq_disable {
+            if self.sequencer_counter == 3 && self.common2.irq_disable() == 0 {
                 self.sequencer_interrupt_flag = true;
             }
 
@@ -227,7 +380,126 @@ impl Apu {
         }
     }
 
-    fn clock_length_counters_and_sweep_units(&mut self) {}
+    fn clock_length_counters_and_sweep_units(&mut self) {
+        if self.common1.length_ctr_enable_pulse_1() == 0 {
+            self.square1_length_counter = 0;
+        } else {
+            if self.square1_1.halt() == 0 && self.square1_length_counter > 0 {
+                self.square1_length_counter -= 1;
+            }
+        }
 
-    fn clock_envelopes_and_triangle_linear_counter(&mut self) {}
+        let square1_sweep_period = self.square1_2.period() + 1;
+        let square1_period = (self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8);
+        let mut square1_shifter_result = square1_period >> self.square1_2.shift() as u16;
+        if self.square1_2.negative() == 1 {
+            square1_shifter_result = !square1_shifter_result;
+        }
+        // If ch2: square2_shifter_result++
+        square1_shifter_result += square1_period;
+
+        let mut dac_output = true;
+        if square1_period < 8 || square1_shifter_result > 0x7FF {
+            dac_output = false;
+        } else if self.square1_2.enable_sweep() == 1 &&  self.square1_2.shift() != 0 {
+            self.square1_period_low = ((square1_shifter_result & 0xFF) as u8);
+            self.square1_4.set_period_high(((square1_shifter_result >> 8) & 0xFF) as u8);
+        }
+        self.square1_sweep_output = dac_output;
+
+        if self.common1.length_ctr_enable_pulse_2() == 0 {
+            self.square2_length_counter = 0;
+        } else {
+            if self.square2_1.halt() == 0 && self.square2_length_counter > 0 {
+                self.square2_length_counter -= 1;
+            }
+        }
+
+        if self.common1.length_ctr_enable_triangle() == 0 {
+            self.triangle_length_counter = 0;
+        } else {
+            if self.triangle_1.control() == 0 && self.triangle_length_counter > 0 {
+                self.triangle_length_counter -= 1;
+            }
+        }
+
+        if self.common1.length_ctr_enable_noise() == 0 {
+            self.noise_length_counter = 0;
+        } else {
+            if self.noise_1.halt() == 0 && self.noise_length_counter > 0 {
+                self.noise_length_counter -= 1;
+            }
+        }
+    }
+
+    fn clock_envelopes_and_triangle_linear_counter(&mut self) {
+        if self.square1_envelope_reset {
+            self.square1_envelope_counter = 15;
+            self.square1_envelope_divider = 0;
+            self.square1_envelope_reset = false;
+        } else {
+            let divider_period = self.square1_1.envelope_period() + 1;
+            self.square1_envelope_divider += 1;
+            if self.square1_envelope_divider == divider_period {
+                if self.square1_1.loop_envelope() == 1 && self.square1_envelope_counter == 0 {
+                    self.square1_envelope_counter = 15;
+                } else if self.square1_envelope_counter > 0 {
+                    self.square1_envelope_counter -= 1;
+                }
+                self.square1_envelope_divider = 0;
+            }
+        }
+
+        self.square1_volume_out_of_envelope = if self.square1_1.envelope_disable() == 1 { self.square1_1.volume() } else { self.square1_envelope_counter };
+    }
+
+    pub fn clock_cpu_clock(&mut self) {
+        self.cpu_clock_divider += 1;
+        if self.cpu_clock_divider == 0 {
+            return;
+        } else {
+            self.cpu_clock_divider = 0;
+        }
+
+        let square1_period = ((self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8)) + 1;
+        self.square1_timer += 1;
+        if self.square1_timer == square1_period {
+            self.square1_timer = 0;
+
+            let sequence = self.square1_sequencer;
+            self.square1_sequencer = (self.square1_sequencer + 1) % 8;
+            let waveform = SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize];
+
+            let output = self.square1_volume_out_of_envelope * (self.square1_sweep_output as u8);
+            //println!("{}",output);
+        }
+
+        //TODO other channels
+    }
 }
+
+const SQUARE_WAVEFORM_SEQUENCES: [u8;4] = [
+    0b0100_0000,
+    0b0110_0000,
+    0b0111_1000,
+    0b1001_1111,
+];
+
+const LENGTH_COUNTER_LOOKUP_TABLE: [[u8; 2]; 16] = [
+    [0x0A, 0xFE],
+    [0x14, 0x02],
+    [0x28, 0x04],
+    [0x50, 0x06],
+    [0xA0, 0x08],
+    [0x3C, 0x0A],
+    [0x0E, 0x0C],
+    [0x1A, 0x0E],
+    [0x0C, 0x10],
+    [0x18, 0x12],
+    [0x30, 0x14],
+    [0x60, 0x16],
+    [0xC0, 0x18],
+    [0x48, 0x1A],
+    [0x10, 0x1C],
+    [0x20, 0x1E],
+];
