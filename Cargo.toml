@@ -11,6 +11,7 @@ hex = "0.3.1"
 minifb = "0.13.0"
 bitutils = "3.0.0"
 rand = "0.7.2"
+spin_sleep = "0.3.7"
 
 [profile.release]
 debug = true
