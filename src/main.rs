@@ -15,10 +15,12 @@ use crate::input::InputProvider;
 use crate::ppu::nametables_debug_viewer::NametableDebugWindow;
 use std::time::{Instant, Duration};
 use std::ops::Sub;
+use crate::apu::test_sound;
 
 mod bus;
 mod cpu;
 mod ppu;
+mod apu;
 mod input;
 mod cartdrige;
 
@@ -28,6 +30,8 @@ mod ines_loader;
 mod tools;
 
 fn main() {
+    //test_sound();
+
     let mut args = env::args();
 
     let main_window = Rc::new(RefCell::new(MainWindow::new()));

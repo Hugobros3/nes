@@ -1,7 +1,6 @@
 use crate::ppu::main_window::MainWindow;
 use minifb::Key;
 use std::rc::Rc;
-use rand::distributions::uniform::SampleBorrow;
 use std::cell::RefCell;
 use std::borrow::Borrow;
 

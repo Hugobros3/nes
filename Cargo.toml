@@ -12,6 +12,11 @@ minifb = "0.13.0"
 bitutils = "3.0.0"
 rand = "0.7.2"
 spin_sleep = "0.3.7"
+cpal = "0.10.0"
 
 [profile.release]
 debug = true
+
+# hack
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["audiosessiontypes", "audioclient", "coml2api", "combaseapi", "debug", "devpkey", "handleapi", "ksmedia", "mmdeviceapi", "objbase", "std", "synchapi", "winbase", "winuser"] }

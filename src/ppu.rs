@@ -6,7 +6,6 @@ use std::rc::Rc;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::borrow::BorrowMut;
-use rand::Rng;
 
 pub mod main_window;
 pub mod patterns_debug_viewer;
