@@ -61,7 +61,6 @@ impl Cpu {
             let addressing_result = addressing_mode_implementation(self, bus);
 
             let hex_pc = hex::encode(fetching_from.to_be_bytes());
-            //println!("{} {} {:?}", hex_pc.as_str(), instruction.name, self);
 
             // Execute actual instruction
             let instruction_implementation = instruction.implementation;
@@ -90,7 +89,7 @@ impl Cpu {
         self.rem_cycles = 8;
     }
 
-    fn irq(&mut self, bus: &Bus) {
+    pub fn irq(&mut self, bus: &Bus) {
         if self.flags.I() == 0 {
             bus.cpu_write(0x0100 + self.stack_pointer as u16, (self.pc >> 8) as u8);
             self.stack_pointer = self.stack_pointer.wrapping_sub(1);
@@ -100,9 +99,6 @@ impl Cpu {
             self.flags.set_B(0);
             self.flags.set_U(1);
             self.flags.set_I(1);
-            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::B, false);
-            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::U, true);
-            //CpuStateFlags::set(&mut cpu.flags, CpuStateFlags::I, true);
             bus.cpu_write(0x0100 + self.stack_pointer as u16, self.flags.val);
             self.stack_pointer = self.stack_pointer.wrapping_sub(1);
 

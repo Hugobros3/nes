@@ -7,8 +7,7 @@ use std::cell::UnsafeCell;
 
 pub type FrameSoundBuffer = Vec<u8>;
 
-//static QUEUE: Mutex<Vec<Box<FrameSoundBuffer>>> = Mutex::new(Vec::<Box<FrameSoundBuffer>>::new());
-
+/// Creates an synchronous thread to read sound data
 pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
     let (tx, rx) = sync_channel::<FrameSoundBuffer>(10);
 
@@ -33,17 +32,6 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
 
         let mut rx = Mutex::new(rx);
         let sample_rate = format.sample_rate.0 as f32;
-        let mut sample_clock = 0f32;
-        //println!("{:?}", format.sample_rate);
-
-        // Produce a sinusoid of maximum amplitude.
-        /*let mut next_value = || {
-            sample_clock = (sample_clock + 1.0) % sample_rate;
-            //rand::random::<f32>()
-            //if ((sample_clock * (440.0) / sample_rate) % 1.0) < 0.45 + 0.05 * rand::random::<f32>() { 1.0 } else { 0.0 }
-            //(sample_clock * 440.0 * 2.0 * 3.141592 / sample_rate).sin()
-            (sample_clock / sample_rate < 0.20) as i32 as f32 * if ((sample_clock * (440.0) / sample_rate) % 1.0) < 0.5 { 1.0 } else { 0.0 }
-        };*/
 
         let mut next_value = move || {
             while remaining == 0 {
@@ -59,10 +47,6 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
             remaining -= 1;
             let sampled = sampled as f32 / 255.0;
             sampled
-
-
-            //sample_clock = (sample_clock + 1.0) % sample_rate;
-            //(sample_clock / sample_rate < 0.20) as i32 as f32 * if ((sample_clock * (440.0) / sample_rate) % 1.0) < 0.5 { 1.0 } else { 0.0 }
         };
 
         event_loop.run(move |stream_id, stream_result| {
@@ -78,18 +62,6 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
             match stream_data {
                 cpal::StreamData::Output { buffer: cpal::UnknownTypeOutputBuffer::U16(mut buffer) } => {
                     for sample in buffer.chunks_mut(format.channels as usize) {
-                        /*if remaining == 0 {
-                            let buf = rx.get_mut().unwrap().recv().unwrap();
-                            remaining = buf.len();
-                            current_buffer_pos = 0;
-                            current_buffer = Some(buf);
-                        }
-
-                        let optref = current_buffer.as_mut();
-                        let sampled = optref.unwrap()[current_buffer_pos];
-                        current_buffer_pos += 1;
-                        remaining -= 1;
-                        let sampled = sampled as f32 / 255.0;*/
                         let sampled = next_value();
 
                         let value = ((sampled * 0.5 + 0.5) * std::u16::MAX as f32) as u16;
@@ -124,10 +96,9 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
     return tx;
 }
 
+/// Feed garbage to test the async sound routines
 pub fn garbage_test(output: &mut SyncSender<FrameSoundBuffer>) {
     let mut garbage_data = vec![0u8; 100000];
     garbage_data.iter_mut().for_each(|s| { *s = rand::random::<u8>(); });
     output.send(garbage_data);
-
-    //garbage_data.map_in_place(| s | {  *s = rand::random::<u8>()})
 }

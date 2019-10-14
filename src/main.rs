@@ -30,9 +30,7 @@ mod ines_loader;
 mod tools;
 
 fn main() {
-    //test_sound();
     let mut audio_tx = launch_sound();
-    //garbage_test(&mut audio_tx);
 
     let mut args = env::args();
 
@@ -43,8 +41,8 @@ fn main() {
         audio_tx
     );
 
-    let cartdrige = load_rom_file_as_cartdrige("roms/smb.nes");
-    nes.load_cartdrige(cartdrige);
+    let cartridge = load_rom_file_as_cartdrige("roms/dk.nes");
+    nes.load_cartdrige(cartridge);
     nes.reset();
 
     let nestest_mode = args.find(|i| { i == "--nestest"}).is_some();

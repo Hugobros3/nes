@@ -16,6 +16,11 @@ pub fn create_mmc0_cartdrige<T: Read>(reader: &mut BufReader<T>, header: INesHea
         chr_rom.push(page);
     }
 
+    if chr_rom.is_empty() {
+        let mut page = [0; 8192];
+        chr_rom.push(page);
+    }
+
     return Box::new(Mapper0Cartdrige {
         header,
         prg_rom,

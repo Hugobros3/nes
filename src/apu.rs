@@ -294,7 +294,7 @@ impl Apu {
     fn clock_sequencer(&mut self) {
         if self.common2.frame_sequencer_mode() == 0 {
             // mode 0
-            if self.sequencer_counter == 3 && self.common2.irq_disable() == 0 {
+            if self.sequencer_counter == 3 {
                 self.sequencer_interrupt_flag = true;
             }
 
@@ -317,6 +317,10 @@ impl Apu {
 
             self.sequencer_counter = (self.sequencer_counter + 1) % 5;
         }
+    }
+
+    pub fn is_raising_interrupt(&self) -> bool {
+        self.common2.irq_disable() == 0 && self.sequencer_interrupt_flag
     }
 
     fn clock_length_counters_and_sweep_units(&mut self) {
@@ -407,7 +411,7 @@ impl Apu {
 
 
         let sequence = self.square1_sequencer;
-        let waveform = ((((SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize] >> sequence) & 0x01) != 0) as u8) * 8;
+        let waveform = ((((SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize] >> sequence) & 0x01) != 0) as u8) * 1;
         let output = self.square1_volume_out_of_envelope * (self.square1_sweep_output as u8) * waveform;
         self.audio_buffer.push(output);
 

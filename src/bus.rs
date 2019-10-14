@@ -142,6 +142,10 @@ impl Bus where {
 
             self.apu.borrow_mut().clock_main(12);
             self.apu.borrow_mut().clock_cpu_clock();
+
+            if self.apu.borrow().is_raising_interrupt() {
+                self.cpu.borrow_mut().irq(self);
+            }
         }
 
         let do_ppu_nmi = {
