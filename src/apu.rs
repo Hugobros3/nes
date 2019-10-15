@@ -376,38 +376,38 @@ impl Apu {
     }
 
     fn clock_envelopes_and_triangle_linear_counter(&mut self) {
+        let divider_period = self.square1_1.envelope_period() + 1;
         if self.square1_envelope_reset {
             self.square1_envelope_counter = 15;
-            self.square1_envelope_divider = 0;
+            self.square1_envelope_divider = divider_period;
             self.square1_envelope_reset = false;
         } else {
-            let divider_period = self.square1_1.envelope_period() + 1;
-            self.square1_envelope_divider += 1;
-            if self.square1_envelope_divider == divider_period {
+            if self.square1_envelope_divider == 0 {
                 if self.square1_1.loop_envelope() == 1 && self.square1_envelope_counter == 0 {
                     self.square1_envelope_counter = 15;
                 } else if self.square1_envelope_counter > 0 {
                     self.square1_envelope_counter -= 1;
                 }
-                self.square1_envelope_divider = 0;
+                self.square1_envelope_divider = divider_period;
             }
+            self.square1_envelope_divider -= 1;
         }
 
         self.square1_volume_out_of_envelope = if self.square1_1.envelope_disable() == 1 { self.square1_1.volume() } else { self.square1_envelope_counter };
     }
 
     pub fn clock_cpu_clock(&mut self) {
-        self.cpu_clock_divider += 1;
-        if self.cpu_clock_divider == 2 {
-            self.cpu_clock_divider = 0;
+        if self.cpu_clock_divider == 0 {
+            self.cpu_clock_divider = 2;
 
             let square1_period = ((self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8)) + 1;
-            self.square1_timer += 1;
-            if self.square1_timer == square1_period {
-                self.square1_timer = 0;
+            if self.square1_timer == 0 {
+                self.square1_timer = square1_period;
                 self.square1_sequencer = (self.square1_sequencer + 1) % 8;
             }
+            self.square1_timer -= 1;
         }
+        self.cpu_clock_divider -= 1;
 
 
         let sequence = self.square1_sequencer;
