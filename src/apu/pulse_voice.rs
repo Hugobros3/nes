@@ -179,7 +179,7 @@ impl PulseVoice {
     pub fn output(&self) -> u8 {
         let sequence = self.output_sequencer;
         let waveform = ((((SQUARE_WAVEFORM_SEQUENCES[self.register1.duty() as usize] >> sequence) & 0x01) != 0) as u8) * 1;
-        self.volume_out_of_envelope * (self.sweep_output as u8) * waveform
+        self.volume_out_of_envelope * (self.sweep_output as u8) * waveform* ((self.length_counter > 0) as u8)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::cartdrige::Cartdrige;
 use std::fs::File;
 use std::io::{Read, BufReader};
 
-use crate::mappers::{create_mmc0_cartdrige};
+use crate::mappers::{create_cartdrige};
 
 const INES_MAGIC_BYTES: &'static str = "NES\u{001a}";
 
@@ -11,17 +11,7 @@ pub fn load_rom_file_as_cartdrige(filename: &str) -> Box<dyn Cartdrige> {
     let mut reader = BufReader::new(f);
 
     let header = read_header(&mut reader);
-
-    match header.mapper_type {
-        0 => {
-            return create_mmc0_cartdrige(&mut reader, header);
-        }
-        _ => {
-            panic!("Unsupported mapper type: {}", header.mapper_type)
-        }
-    }
-
-    panic!("todo")
+    create_cartdrige(header, reader)
 }
 
 // Reads the header and spits out an internal struct that's easy to deal with
@@ -83,6 +73,7 @@ pub enum MirroringMode {
     FourScreen,
 }
 
+#[derive(Debug)]
 pub struct INesHeaderInfo {
     pub mapper_type: u8,
     pub mirroring_mode: MirroringMode,
