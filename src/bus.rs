@@ -4,7 +4,7 @@ use crate::ppu::{Ppu, PpuOutput};
 use crate::cartdrige::Cartdrige;
 use std::rc::Rc;
 use crate::input::{Controllers, InputProvider};
-use crate::apu::Apu;
+use crate::apu::apu_device::Apu;
 use std::sync::mpsc::SyncSender;
 use crate::apu::streaming_audio::FrameSoundBuffer;
 

@@ -1,30 +1,7 @@
 use crate::bus::Bus;
 use std::sync::mpsc::SyncSender;
 use crate::apu::streaming_audio::FrameSoundBuffer;
-
-pub mod streaming_audio;
-
-// Square voices registers
-bf!(SquareVoiceReg1[u8] {
-    volume: 0:3,
-    envelope_period: 0:3,
-    envelope_disable: 4:4,
-    loop_envelope: 5:5,
-    halt: 5:5,
-    duty: 6:7,
-});
-bf!(SquareVoiceReg2[u8] {
-    shift: 0:2,
-    negative: 3:3,
-    period: 4:6,
-    enable_sweep: 7:7,
-});
-bf!(SquareVoiceReg3[u8] {
-});
-bf!(SquareVoiceReg4[u8] {
-    period_high: 0:2,
-    length_index: 3:7,
-});
+use crate::apu::pulse_voice::PulseVoice;
 
 // Triangle voice registers
 bf!(TriangleVoiceReg1[u8] {
@@ -93,26 +70,8 @@ bf!(CommonReg2[u8] {
 pub struct Apu {
     cpu_clock_divider: u8,
 
-    square1_1: SquareVoiceReg1,
-    square1_2: SquareVoiceReg2,
-    square1_period_low: u8,
-    square1_4: SquareVoiceReg4,
-    square1_length_counter: u16,
-    square1_envelope_counter: u8,
-    square1_envelope_divider: u8,
-    square1_envelope_reset: bool,
-    square1_volume_out_of_envelope: u8,
-    square1_timer: u16,
-    square1_sweep_divider: u8,
-    square1_sweep_reset: bool,
-    square1_sweep_output: bool,
-    square1_sequencer: u8,
-
-    square2_1: SquareVoiceReg1,
-    square2_2: SquareVoiceReg2,
-    square2_3: SquareVoiceReg3,
-    square2_4: SquareVoiceReg4,
-    square2_length_counter: u16,
+    square_voice1: PulseVoice,
+    square_voice2: PulseVoice,
 
     triangle_1: TriangleVoiceReg1,
     triangle_2: TriangleVoiceReg2,
@@ -146,26 +105,8 @@ impl Apu {
         Self {
             cpu_clock_divider: 0,
 
-            square1_1: SquareVoiceReg1::new(0),
-            square1_2: SquareVoiceReg2::new(0),
-            square1_period_low: 0,
-            square1_4: SquareVoiceReg4::new(0),
-            square1_length_counter: 0,
-            square1_envelope_counter: 0,
-            square1_envelope_divider: 0,
-            square1_envelope_reset: false,
-            square1_volume_out_of_envelope: 0,
-            square1_timer: 0,
-            square1_sweep_divider: 0,
-            square1_sweep_reset: false,
-            square1_sweep_output: false,
-            square1_sequencer: 0,
-
-            square2_1: SquareVoiceReg1::new(0),
-            square2_2: SquareVoiceReg2::new(0),
-            square2_3: SquareVoiceReg3::new(0),
-            square2_4: SquareVoiceReg4::new(0),
-            square2_length_counter: 0,
+            square_voice1: PulseVoice::new(false),
+            square_voice2: PulseVoice::new(true),
 
             triangle_1: TriangleVoiceReg1::new(0),
             triangle_2: TriangleVoiceReg2::new(0),
@@ -195,36 +136,13 @@ impl Apu {
     }
 
     pub fn cpu_write(&mut self, bus: &Bus, address: u16, data: u8) {
+        if address >= 0x4000 && address <= 0x4003 {
+            self.square_voice1.write_register(((address & 0x03) as u8), data);
+        } else if address >= 0x4004 && address <= 0x4007 {
+            self.square_voice2.write_register(((address & 0x03) as u8), data);
+        }
+
         match address {
-            // Square 1
-            0x4000 => { self.square1_1.val = data; }
-            0x4001 => {
-                self.square1_2.val = data;
-                self.square1_sweep_reset = true;
-            }
-            0x4002 => { self.square1_period_low = data; }
-            0x4003 => {
-                self.square1_4.val = data;
-                // Write to 4th register triggers length counter reset
-                if self.common1.length_ctr_enable_pulse_1() != 0 {
-                    let length_key = self.square1_4.length_index();
-                    self.square1_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
-                }
-                self.square1_envelope_reset = true;
-                self.square1_sequencer = 0;
-            }
-            // Square 2
-            0x4004 => { self.square2_1.val = data; }
-            0x4005 => { self.square2_2.val = data; }
-            0x4006 => { self.square2_3.val = data; }
-            0x4007 => {
-                self.square2_4.val = data;
-                // Write to 4th register triggers length counter reset
-                if self.common1.length_ctr_enable_pulse_2() != 0 {
-                    let length_key = self.square2_4.length_index();
-                    self.square2_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
-                }
-            }
             // Triangle
             0x4008 => { self.triangle_1.val = data; }
             //0x4009: nothing
@@ -250,6 +168,8 @@ impl Apu {
             // Control
             0x4015 => {
                 self.common1.val = data;
+                self.square_voice1.control_enabled = self.common1.length_ctr_enable_pulse_1() != 0;
+                self.square_voice2.control_enabled = self.common1.length_ctr_enable_pulse_2() != 0;
 
                 self.dmc_irq = false;
                 //TODO DMC behavior
@@ -277,7 +197,8 @@ impl Apu {
                 /*(((self.dmc_sample_bytes_remaining > 0) as u8) << 4) | */
                 (((self.noise_length_counter > 0) as u8) << 3) |
                 (((self.triangle_length_counter > 0) as u8) << 2) |
-                (((self.square2_length_counter > 0) as u8) << 1);
+                (((self.square_voice2.length_counter > 0) as u8) << 1);
+                (((self.square_voice1.length_counter > 0) as u8) << 0);
 
             self.sequencer_interrupt_flag = false;
         }
@@ -324,39 +245,8 @@ impl Apu {
     }
 
     fn clock_length_counters_and_sweep_units(&mut self) {
-        if self.common1.length_ctr_enable_pulse_1() == 0 {
-            self.square1_length_counter = 0;
-        } else {
-            if self.square1_1.halt() == 0 && self.square1_length_counter > 0 {
-                self.square1_length_counter -= 1;
-            }
-        }
-
-        let square1_sweep_period = self.square1_2.period() + 1;
-        let square1_period = (self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8);
-        let mut square1_shifter_result = square1_period >> self.square1_2.shift() as u16;
-        if self.square1_2.negative() == 1 {
-            square1_shifter_result = !square1_shifter_result;
-        }
-        // If ch2: square2_shifter_result++
-        square1_shifter_result += square1_period;
-
-        let mut dac_output = true;
-        if square1_period < 8 || square1_shifter_result > 0x7FF {
-            dac_output = false;
-        } else if self.square1_2.enable_sweep() == 1 && self.square1_2.shift() != 0 {
-            self.square1_period_low = ((square1_shifter_result & 0xFF) as u8);
-            self.square1_4.set_period_high(((square1_shifter_result >> 8) & 0xFF) as u8);
-        }
-        self.square1_sweep_output = dac_output;
-
-        if self.common1.length_ctr_enable_pulse_2() == 0 {
-            self.square2_length_counter = 0;
-        } else {
-            if self.square2_1.halt() == 0 && self.square2_length_counter > 0 {
-                self.square2_length_counter -= 1;
-            }
-        }
+        self.square_voice1.clock_length_counter_and_sweep_unit();
+        self.square_voice2.clock_length_counter_and_sweep_unit();
 
         if self.common1.length_ctr_enable_triangle() == 0 {
             self.triangle_length_counter = 0;
@@ -376,43 +266,20 @@ impl Apu {
     }
 
     fn clock_envelopes_and_triangle_linear_counter(&mut self) {
-        let divider_period = self.square1_1.envelope_period() + 1;
-        if self.square1_envelope_reset {
-            self.square1_envelope_counter = 15;
-            self.square1_envelope_divider = divider_period;
-            self.square1_envelope_reset = false;
-        } else {
-            if self.square1_envelope_divider == 0 {
-                if self.square1_1.loop_envelope() == 1 && self.square1_envelope_counter == 0 {
-                    self.square1_envelope_counter = 15;
-                } else if self.square1_envelope_counter > 0 {
-                    self.square1_envelope_counter -= 1;
-                }
-                self.square1_envelope_divider = divider_period;
-            }
-            self.square1_envelope_divider -= 1;
-        }
-
-        self.square1_volume_out_of_envelope = if self.square1_1.envelope_disable() == 1 { self.square1_1.volume() } else { self.square1_envelope_counter };
+        self.square_voice1.clock_envelope();
+        self.square_voice2.clock_envelope();
     }
 
     pub fn clock_cpu_clock(&mut self) {
         if self.cpu_clock_divider == 0 {
             self.cpu_clock_divider = 2;
 
-            let square1_period = ((self.square1_period_low as u16) | ((self.square1_4.period_high() as u16) << 8)) + 1;
-            if self.square1_timer == 0 {
-                self.square1_timer = square1_period;
-                self.square1_sequencer = (self.square1_sequencer + 1) % 8;
-            }
-            self.square1_timer -= 1;
+            self.square_voice1.clock_half_cpu();
+            self.square_voice2.clock_half_cpu();
         }
         self.cpu_clock_divider -= 1;
 
-
-        let sequence = self.square1_sequencer;
-        let waveform = ((((SQUARE_WAVEFORM_SEQUENCES[self.square1_1.duty() as usize] >> sequence) & 0x01) != 0) as u8) * 1;
-        let output = self.square1_volume_out_of_envelope * (self.square1_sweep_output as u8) * waveform;
+        let output = self.square_voice1.output() + self.square_voice2.output();
         self.audio_buffer.push(output);
 
         //TODO other channels
@@ -451,14 +318,7 @@ impl Apu {
     }
 }
 
-const SQUARE_WAVEFORM_SEQUENCES: [u8; 4] = [
-    0b0100_0000,
-    0b0110_0000,
-    0b0111_1000,
-    0b1001_1111,
-];
-
-const LENGTH_COUNTER_LOOKUP_TABLE: [[u8; 2]; 16] = [
+pub const LENGTH_COUNTER_LOOKUP_TABLE: [[u8; 2]; 16] = [
     [0x0A, 0xFE],
     [0x14, 0x02],
     [0x28, 0x04],
