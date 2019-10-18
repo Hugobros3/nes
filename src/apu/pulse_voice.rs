@@ -42,29 +42,37 @@ pub struct PulseVoice {
     sweep_output: bool,
 
     wave_timer: u16,
+    cpu_clock_divider: u8,
+
     output_sequencer: u8,
 }
 
 impl PulseVoice {
     pub fn new(is_second_pulse_voice: bool) -> Self {
         Self {
+            is_second_pulse_voice,
+
             control_enabled: false,
+            length_counter: 0,
 
             register1: SquareVoiceReg1::new(0),
             register2: SquareVoiceReg2::new(0),
             register3: 0,
             register4: SquareVoiceReg4::new(0),
-            length_counter: 0,
+
             envelope_counter: 0,
             envelope_divider: 0,
             envelope_freshly_reset_flag: false,
             volume_out_of_envelope: 0,
-            wave_timer: 0,
+
             sweep_divider: 0,
             sweep_freshly_reset_flag: false,
             sweep_output: false,
+
+            wave_timer: 0,
+            cpu_clock_divider: 0,
+
             output_sequencer: 0,
-            is_second_pulse_voice,
         }
     }
 
@@ -92,11 +100,11 @@ impl PulseVoice {
 
     pub fn clock_length_counter_and_sweep_unit(&mut self) {
         if self.control_enabled {
-            self.length_counter = 0;
-        } else {
             if self.register1.halt() == 0 && self.length_counter > 0 {
                 self.length_counter -= 1;
             }
+        } else {
+            self.length_counter = 0;
         }
 
         // Sweep unit
@@ -112,7 +120,6 @@ impl PulseVoice {
 
         let sweep_divider_period = self.register2.period() + 1;
         if self.sweep_divider > 0 {
-            self.sweep_divider -= 1;
         } else {
             let mut dac_output = true;
             if voice_period < 8 || shifter_result > 0x7FF {
@@ -125,6 +132,7 @@ impl PulseVoice {
 
             self.sweep_divider = sweep_divider_period;
         }
+        self.sweep_divider -= 1;
 
         if self.sweep_freshly_reset_flag {
             self.sweep_freshly_reset_flag = false;
@@ -147,17 +155,23 @@ impl PulseVoice {
                 }
                 self.envelope_divider = divider_period;
             }
-            self.envelope_divider -= 1;
         }
+        self.envelope_divider -= 1;
 
         self.volume_out_of_envelope = if self.register1.envelope_disable() == 1 { self.register1.volume() } else { self.envelope_counter };
     }
 
-    pub fn clock_half_cpu(&mut self) {
-        let square1_period = ((self.register3 as u16) | ((self.register4.period_high() as u16) << 8)) + 1;
+    pub fn clock_cpu(&mut self) {
+        let voice_period = ((self.register3 as u16) | ((self.register4.period_high() as u16) << 8)) + 1;
         if self.wave_timer == 0 {
-            self.wave_timer = square1_period;
-            self.output_sequencer = (self.output_sequencer + 1) % 8;
+
+            if self.cpu_clock_divider == 0 {
+                self.cpu_clock_divider = 2;
+                self.output_sequencer = (self.output_sequencer + 1) % 8;
+            }
+            self.cpu_clock_divider -= 1;
+
+            self.wave_timer = voice_period;
         }
         self.wave_timer -= 1;
     }

@@ -2,19 +2,7 @@ use crate::bus::Bus;
 use std::sync::mpsc::SyncSender;
 use crate::apu::streaming_audio::FrameSoundBuffer;
 use crate::apu::pulse_voice::PulseVoice;
-
-// Triangle voice registers
-bf!(TriangleVoiceReg1[u8] {
-    linear_counter_load: 0:6,
-    control: 7:7,
-});
-bf!(TriangleVoiceReg2[u8]{
-    period_low: 0:7,
-});
-bf!(TriangleVoiceReg3[u8]{
-    period_high: 0:2,
-    length_index: 3:7,
-});
+use crate::apu::triangle_voice::TriangleVoice;
 
 // Noise voice registers
 bf!(NoiseVoiceReg1[u8] {
@@ -68,15 +56,9 @@ bf!(CommonReg2[u8] {
 });
 
 pub struct Apu {
-    cpu_clock_divider: u8,
-
     square_voice1: PulseVoice,
     square_voice2: PulseVoice,
-
-    triangle_1: TriangleVoiceReg1,
-    triangle_2: TriangleVoiceReg2,
-    triangle_3: TriangleVoiceReg3,
-    triangle_length_counter: u16,
+    triangle_voice: TriangleVoice,
 
     noise_1: NoiseVoiceReg1,
     noise_2: NoiseVoiceReg2,
@@ -103,15 +85,10 @@ pub struct Apu {
 impl Apu {
     pub(crate) fn new(audio_output: SyncSender<FrameSoundBuffer>) -> Self {
         Self {
-            cpu_clock_divider: 0,
-
             square_voice1: PulseVoice::new(false),
             square_voice2: PulseVoice::new(true),
 
-            triangle_1: TriangleVoiceReg1::new(0),
-            triangle_2: TriangleVoiceReg2::new(0),
-            triangle_3: TriangleVoiceReg3::new(0),
-            triangle_length_counter: 0,
+            triangle_voice: TriangleVoice::new(),
 
             noise_1: NoiseVoiceReg1::new(0),
             noise_2: NoiseVoiceReg2::new(0),
@@ -140,21 +117,13 @@ impl Apu {
             self.square_voice1.write_register(((address & 0x03) as u8), data);
         } else if address >= 0x4004 && address <= 0x4007 {
             self.square_voice2.write_register(((address & 0x03) as u8), data);
+        } else if address >= 0x4008 && address <= 0x400B {
+            self.triangle_voice.write_register(((address & 0x03) as u8), data);
+        } else if address >= 0x400C && address <= 0x400F {
+            //self.triangle_voice.write_register(((address & 0x03) as u8), data);
         }
 
         match address {
-            // Triangle
-            0x4008 => { self.triangle_1.val = data; }
-            //0x4009: nothing
-            0x400A => { self.triangle_2.val = data; }
-            0x400B => {
-                self.triangle_3.val = data;
-                // Write to 4th register triggers length counter reset
-                if self.common1.length_ctr_enable_triangle() != 0 {
-                    let length_key = self.triangle_3.length_index();
-                    self.triangle_length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
-                }
-            }
             // Noise channel
             0x400C => { self.noise_1.val = data; }
             //0x400D: nothing
@@ -170,6 +139,7 @@ impl Apu {
                 self.common1.val = data;
                 self.square_voice1.control_enabled = self.common1.length_ctr_enable_pulse_1() != 0;
                 self.square_voice2.control_enabled = self.common1.length_ctr_enable_pulse_2() != 0;
+                self.triangle_voice.control_enabled = self.common1.length_ctr_enable_triangle() != 0;
 
                 self.dmc_irq = false;
                 //TODO DMC behavior
@@ -196,7 +166,7 @@ impl Apu {
                 ((self.sequencer_interrupt_flag as u8) << 6) |
                 /*(((self.dmc_sample_bytes_remaining > 0) as u8) << 4) | */
                 (((self.noise_length_counter > 0) as u8) << 3) |
-                (((self.triangle_length_counter > 0) as u8) << 2) |
+                (((self.triangle_voice.length_counter > 0) as u8) << 2) |
                 (((self.square_voice2.length_counter > 0) as u8) << 1);
                 (((self.square_voice1.length_counter > 0) as u8) << 0);
 
@@ -248,13 +218,7 @@ impl Apu {
         self.square_voice1.clock_length_counter_and_sweep_unit();
         self.square_voice2.clock_length_counter_and_sweep_unit();
 
-        if self.common1.length_ctr_enable_triangle() == 0 {
-            self.triangle_length_counter = 0;
-        } else {
-            if self.triangle_1.control() == 0 && self.triangle_length_counter > 0 {
-                self.triangle_length_counter -= 1;
-            }
-        }
+        self.triangle_voice.clock_length_counter();
 
         if self.common1.length_ctr_enable_noise() == 0 {
             self.noise_length_counter = 0;
@@ -268,18 +232,15 @@ impl Apu {
     fn clock_envelopes_and_triangle_linear_counter(&mut self) {
         self.square_voice1.clock_envelope();
         self.square_voice2.clock_envelope();
+        self.triangle_voice.clock_linear_counter();
     }
 
     pub fn clock_cpu_clock(&mut self) {
-        if self.cpu_clock_divider == 0 {
-            self.cpu_clock_divider = 2;
+        self.square_voice1.clock_cpu();
+        self.square_voice2.clock_cpu();
+        self.triangle_voice.clock_cpu();
 
-            self.square_voice1.clock_half_cpu();
-            self.square_voice2.clock_half_cpu();
-        }
-        self.cpu_clock_divider -= 1;
-
-        let output = self.square_voice1.output() + self.square_voice2.output();
+        let output = self.square_voice1.output() + self.square_voice2.output() + self.triangle_voice.output();
         self.audio_buffer.push(output);
 
         //TODO other channels
