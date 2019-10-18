@@ -3,24 +3,7 @@ use std::sync::mpsc::SyncSender;
 use crate::apu::streaming_audio::FrameSoundBuffer;
 use crate::apu::pulse_voice::PulseVoice;
 use crate::apu::triangle_voice::TriangleVoice;
-
-// Noise voice registers
-bf!(NoiseVoiceReg1[u8] {
-    vol_env_period: 0:3,
-    env_disable: 4:4,
-    loop_env_disable_length: 5:5,
-    halt: 5:5,
-    unused: 6:7,
-});
-bf!(NoiseVoiceReg2[u8] {
-    period_index: 0:3,
-    unused: 4:6,
-    short_mode: 7:7,
-});
-bf!(NoiseVoiceReg3[u8] {
-    unused: 0:2,
-    length_index: 3:7,
-});
+use crate::apu::noise_voice::NoiseVoice;
 
 // DMC registers
 bf!(DmcReg1[u8] {
@@ -59,11 +42,7 @@ pub struct Apu {
     square_voice1: PulseVoice,
     square_voice2: PulseVoice,
     triangle_voice: TriangleVoice,
-
-    noise_1: NoiseVoiceReg1,
-    noise_2: NoiseVoiceReg2,
-    noise_3: NoiseVoiceReg3,
-    noise_length_counter: u16,
+    noise_voice: NoiseVoice,
 
     dmc_1: DmcReg1,
     dmc_2: DmcReg2,
@@ -87,13 +66,8 @@ impl Apu {
         Self {
             square_voice1: PulseVoice::new(false),
             square_voice2: PulseVoice::new(true),
-
             triangle_voice: TriangleVoice::new(),
-
-            noise_1: NoiseVoiceReg1::new(0),
-            noise_2: NoiseVoiceReg2::new(0),
-            noise_3: NoiseVoiceReg3::new(0),
-            noise_length_counter: 0,
+            noise_voice: NoiseVoice::new(),
 
             dmc_1: DmcReg1::new(0),
             dmc_2: DmcReg2::new(0),
@@ -120,15 +94,10 @@ impl Apu {
         } else if address >= 0x4008 && address <= 0x400B {
             self.triangle_voice.write_register(((address & 0x03) as u8), data);
         } else if address >= 0x400C && address <= 0x400F {
-            //self.triangle_voice.write_register(((address & 0x03) as u8), data);
+            self.noise_voice.write_register(((address & 0x03) as u8), data);
         }
 
         match address {
-            // Noise channel
-            0x400C => { self.noise_1.val = data; }
-            //0x400D: nothing
-            0x400E => { self.noise_2.val = data; }
-            0x400F => { self.noise_3.val = data; }
             // DPCM
             0x4010 => { self.dmc_1.val = data; }
             0x4011 => { self.dmc_2.val = data; }
@@ -140,6 +109,7 @@ impl Apu {
                 self.square_voice1.control_enabled = self.common1.length_ctr_enable_pulse_1() != 0;
                 self.square_voice2.control_enabled = self.common1.length_ctr_enable_pulse_2() != 0;
                 self.triangle_voice.control_enabled = self.common1.length_ctr_enable_triangle() != 0;
+                self.noise_voice.control_enabled = self.common1.length_ctr_enable_noise() != 0;
 
                 self.dmc_irq = false;
                 //TODO DMC behavior
@@ -165,7 +135,7 @@ impl Apu {
             *data = ((self.dmc_irq as u8) << 7) |
                 ((self.sequencer_interrupt_flag as u8) << 6) |
                 /*(((self.dmc_sample_bytes_remaining > 0) as u8) << 4) | */
-                (((self.noise_length_counter > 0) as u8) << 3) |
+                (((self.noise_voice.length_counter > 0) as u8) << 3) |
                 (((self.triangle_voice.length_counter > 0) as u8) << 2) |
                 (((self.square_voice2.length_counter > 0) as u8) << 1);
                 (((self.square_voice1.length_counter > 0) as u8) << 0);
@@ -217,30 +187,25 @@ impl Apu {
     fn clock_length_counters_and_sweep_units(&mut self) {
         self.square_voice1.clock_length_counter_and_sweep_unit();
         self.square_voice2.clock_length_counter_and_sweep_unit();
-
         self.triangle_voice.clock_length_counter();
-
-        if self.common1.length_ctr_enable_noise() == 0 {
-            self.noise_length_counter = 0;
-        } else {
-            if self.noise_1.halt() == 0 && self.noise_length_counter > 0 {
-                self.noise_length_counter -= 1;
-            }
-        }
+        self.noise_voice.clock_length_counter();
     }
 
     fn clock_envelopes_and_triangle_linear_counter(&mut self) {
         self.square_voice1.clock_envelope();
         self.square_voice2.clock_envelope();
         self.triangle_voice.clock_linear_counter();
+        self.noise_voice.clock_envelope();
     }
 
     pub fn clock_cpu_clock(&mut self) {
         self.square_voice1.clock_cpu();
         self.square_voice2.clock_cpu();
         self.triangle_voice.clock_cpu();
+        self.noise_voice.clock_cpu();
 
-        let output = self.square_voice1.output() + self.square_voice2.output() + self.triangle_voice.output();
+        let output = self.square_voice1.output() + self.square_voice2.output() + self.triangle_voice.output() + self.noise_voice.output();
+        //let output = self.noise_voice.output();
         self.audio_buffer.push(output);
 
         //TODO other channels

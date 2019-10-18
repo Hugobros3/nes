@@ -3,10 +3,7 @@ bf!(TriangleVoiceReg1[u8] {
     linear_counter_reload_value: 0:6,
     control: 7:7,
 });
-bf!(TriangleVoiceReg2[u8]{
-    period_low: 0:7,
-});
-bf!(TriangleVoiceReg3[u8]{
+bf!(TriangleVoiceReg4[u8]{
     period_high: 0:2,
     length_index: 3:7,
 });
@@ -16,13 +13,13 @@ pub struct TriangleVoice {
     pub length_counter: u16,
 
     register1: TriangleVoiceReg1,
-    register2: u8,
-    register3: TriangleVoiceReg3,
+    register3: u8,
+    register4: TriangleVoiceReg4,
 
     linear_counter: u8,
     linear_counter_halt_flag: bool,
 
-    wave_timer: u16,
+    timer: u16,
 
     output_sequencer: u8,
 }
@@ -33,15 +30,15 @@ impl TriangleVoice {
             control_enabled: false,
 
             register1: TriangleVoiceReg1::new(0),
-            register2: 0,
-            register3: TriangleVoiceReg3::new(0),
+            register3: 0,
+            register4: TriangleVoiceReg4::new(0),
 
             length_counter: 0,
 
             linear_counter: 0,
             linear_counter_halt_flag: false,
 
-            wave_timer: 0,
+            timer: 0,
 
             output_sequencer: 0,
         }
@@ -51,13 +48,13 @@ impl TriangleVoice {
         match address {
             /* 0x4008 */ 0x00 => { self.register1.val = data; }
             /* 0x4009 */ // nothing here !
-            /* 0x400A */ 0x02 => { self.register2 = data; }
+            /* 0x400A */ 0x02 => { self.register3 = data; }
             /* 0x400B */ 0x03 => {
-                self.register3.val = data;
+                self.register4.val = data;
 
                 // Write to 4th register triggers length counter reset
                 if self.control_enabled {
-                    let length_key = self.register3.length_index();
+                    let length_key = self.register4.length_index();
                     self.length_counter = LENGTH_COUNTER_LOOKUP_TABLE[(length_key >> 1) as usize][(length_key & 0x01) as usize] as u16;
                 }
 
@@ -90,17 +87,17 @@ impl TriangleVoice {
     }
 
     pub fn clock_cpu(&mut self) {
-        let voice_period = ((self.register2 as u16) | ((self.register3.period_high() as u16) << 8)) + 1;
+        let voice_period = ((self.register3 as u16) | ((self.register4.period_high() as u16) << 8)) + 1;
         //println!("{} {} {}", self.register2, self.register3.val, voice_period);
         //let voice_period = 40;
-        if self.wave_timer == 0 {
+        if self.timer == 0 {
             if self.linear_counter > 0 && self.length_counter > 0 {
                 self.output_sequencer = (self.output_sequencer + 1) % 32;
             }
 
-            self.wave_timer = voice_period;
+            self.timer = voice_period;
         }
-        self.wave_timer -= 1;
+        self.timer -= 1;
     }
 
     pub fn output(&self) -> u8 {

@@ -41,7 +41,7 @@ pub struct PulseVoice {
     sweep_freshly_reset_flag: bool,
     sweep_output: bool,
 
-    wave_timer: u16,
+    timer: u16,
     cpu_clock_divider: u8,
 
     output_sequencer: u8,
@@ -69,7 +69,7 @@ impl PulseVoice {
             sweep_freshly_reset_flag: false,
             sweep_output: false,
 
-            wave_timer: 0,
+            timer: 0,
             cpu_clock_divider: 0,
 
             output_sequencer: 0,
@@ -163,7 +163,7 @@ impl PulseVoice {
 
     pub fn clock_cpu(&mut self) {
         let voice_period = ((self.register3 as u16) | ((self.register4.period_high() as u16) << 8)) + 1;
-        if self.wave_timer == 0 {
+        if self.timer == 0 {
 
             if self.cpu_clock_divider == 0 {
                 self.cpu_clock_divider = 2;
@@ -171,9 +171,9 @@ impl PulseVoice {
             }
             self.cpu_clock_divider -= 1;
 
-            self.wave_timer = voice_period;
+            self.timer = voice_period;
         }
-        self.wave_timer -= 1;
+        self.timer -= 1;
     }
 
     pub fn output(&self) -> u8 {
