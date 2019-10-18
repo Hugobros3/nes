@@ -41,7 +41,7 @@ pub fn dump_visual_memory_contents(nes: &Bus, filename: &str) {
     let mut at = 0u32;
     let to = 0x4000u32;
 
-    let ppu = nes.ppu.borrow_mut();
+    let mut ppu = nes.ppu.borrow_mut();
 
     while at < to {
         let bytes_per_line = 16;

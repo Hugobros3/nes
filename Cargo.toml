@@ -16,6 +16,7 @@ cpal = "0.10.0"
 
 [profile.release]
 debug = true
+lto = true
 
 # hack
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -41,7 +41,7 @@ fn main() {
         audio_tx
     );
 
-    let cartridge = load_rom_file_as_cartdrige("roms/live.nes");
+    let cartridge = load_rom_file_as_cartdrige("roms/smb3.nes");
     nes.load_cartdrige(cartridge);
     nes.reset();
 

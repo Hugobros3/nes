@@ -116,6 +116,7 @@ impl Bus where {
 
     pub fn clock(&mut self) {
         self.ppu.borrow_mut().clock(self);
+
         if self.master_clock_counter % 3 == 0 {
             if self.dma.borrow().is_doing_dma {
                 let mut dma = self.dma.borrow_mut();
@@ -148,18 +149,26 @@ impl Bus where {
             }
         }
 
-        let do_ppu_nmi = {
+        let mut do_ppu_nmi = false;
+        let mut do_ppu_irq = false;
+        {
             let mut ppu = self.ppu.borrow_mut();//.borrow_mut();
             if ppu.send_nmi {
                 ppu.send_nmi = false;
-                true
-            } else {
-                false
+                do_ppu_nmi = true
             }
-        };
+            if ppu.send_irq {
+                ppu.send_irq = false;
+                do_ppu_irq = true
+            }
+        }
+
         if do_ppu_nmi {
-            //println!("nmi!");
             self.cpu.borrow_mut().nmi(self);
+        }
+        if do_ppu_irq {
+            self.cpu.borrow_mut().irq(self);
+            println!("ppu irq")
         }
 
         self.master_clock_counter += 1;

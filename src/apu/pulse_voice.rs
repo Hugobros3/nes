@@ -114,9 +114,9 @@ impl PulseVoice {
             shifter_result = !shifter_result;
         }
         if self.is_second_pulse_voice {
-            shifter_result += 1;
+            shifter_result = shifter_result.wrapping_add(1);
         }
-        shifter_result += voice_period;
+        shifter_result = shifter_result.wrapping_add(voice_period);
 
         let sweep_divider_period = self.register2.period() + 1;
         if self.sweep_divider > 0 {

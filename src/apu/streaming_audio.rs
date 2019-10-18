@@ -29,12 +29,33 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
         let mut current_buffer: Option<FrameSoundBuffer> = Option::None;
         let mut current_buffer_pos = 0;
         let mut remaining = 0;
+        let mut last_sampled = 0f32;
 
         let mut rx = Mutex::new(rx);
         let sample_rate = format.sample_rate.0 as f32;
 
         let mut next_value = move || {
-            while remaining == 0 {
+            if remaining == 0 {
+                let r = rx.get_mut().unwrap().try_recv();
+                if let Result::Ok(buffer) = r {
+                    remaining = buffer.len();
+                    current_buffer_pos = 0;
+                    current_buffer = Some(buffer);
+                }
+            }
+
+            if remaining > 0 {
+                let optref = current_buffer.as_mut();
+                let sampled = optref.unwrap()[current_buffer_pos];
+                current_buffer_pos += 1;
+                remaining -= 1;
+                let sampled = sampled as f32 / 255.0;
+                last_sampled = sampled;
+                sampled
+            } else {
+                last_sampled
+            }
+            /*while remaining == 0 {
                 let buf = rx.get_mut().unwrap().recv().unwrap();
                 remaining = buf.len();
                 current_buffer_pos = 0;
@@ -46,7 +67,7 @@ pub fn launch_sound() -> SyncSender<FrameSoundBuffer> {
             current_buffer_pos += 1;
             remaining -= 1;
             let sampled = sampled as f32 / 255.0;
-            sampled
+            sampled*/
         };
 
         event_loop.run(move |stream_id, stream_result| {

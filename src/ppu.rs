@@ -98,6 +98,7 @@ pub struct Ppu where {
     sprite_zero_rendering: bool,
 
     pub send_nmi: bool,
+    pub send_irq: bool,
 
     output: Rc<dyn PpuOutput>,
 }
@@ -140,6 +141,7 @@ impl Ppu {
             sprite_zero_rendering: true,
 
             send_nmi: false,
+            send_irq: false,
 
             output,
         };
@@ -248,13 +250,19 @@ impl Ppu {
         }
     }
 
-    pub fn ppu_read(&self, bus: &Bus, address: u16, read_only: bool) -> u8 {
+    pub fn ppu_read(&mut self, bus: &Bus, address: u16, read_only: bool) -> u8 {
         let address = address & 0x3FFFu16;
         let mut data = 0u8;
 
         let mut cart_brw = bus.cartdrige.borrow_mut();
 
-        if cart_brw.is_some() && cart_brw.as_mut().unwrap().ppu_read(address, &mut data) {} else if address >= 0x2000u16 && address <= 0x3EFF {
+        let (cart_handled, irq_requested) = if cart_brw.is_some() { cart_brw.as_mut().unwrap().ppu_read(address, &mut data) } else { (false, false) } ;
+
+        if irq_requested {
+            self.send_irq = true;
+        }
+
+        if cart_handled {} else if address >= 0x2000u16 && address <= 0x3EFF {
             let address = address & 0x0FFF;
             let quadrant = address >> 10;
 

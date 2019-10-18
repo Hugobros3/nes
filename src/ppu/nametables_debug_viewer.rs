@@ -18,7 +18,7 @@ impl NametableDebugWindow {
             resize: false,
             ..WindowOptions::default()
         };
-        let mut window = Window::new("Pattern tables", width as usize, height as usize, options).unwrap_or_else(|e| { panic!("{}", e); });
+        let mut window = Window::new("Name tables", width as usize, height as usize, options).unwrap_or_else(|e| { panic!("{}", e); });
         return Self {
             window,
             buffer,
@@ -43,8 +43,10 @@ impl NametableDebugWindow {
                         }
 
                         for fine_y in 0..8 {
-                            let lsb = ppu.ppu_read(bus, ((ppu.control.pattern_background() as u16) << 12) as u16 + ((tile_id as u16) << 4) + fine_y + 0, false);
-                            let msb = ppu.ppu_read(bus, ((ppu.control.pattern_background() as u16) << 12) as u16 + ((tile_id as u16) << 4) + fine_y + 8, false);
+                            let address_low = ((ppu.control.pattern_background() as u16) << 12) as u16 + ((tile_id as u16) << 4) + fine_y + 0;
+                            let address_hi =  ((ppu.control.pattern_background() as u16) << 12) as u16 + ((tile_id as u16) << 4) + fine_y + 8;
+                            let lsb = ppu.ppu_read(bus, address_low, false);
+                            let msb = ppu.ppu_read(bus, address_hi, false);
 
                             for fine_x in 0..8 {
                                 let x = nametable_x * 256 + coarse_x * 8 + 7 - fine_x;

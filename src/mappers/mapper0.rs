@@ -57,14 +57,14 @@ impl Cartdrige for Mapper0Cartdrige {
         return false;
     }
 
-    fn ppu_read(&mut self, address: u16, data: &mut u8) -> bool {
+    fn ppu_read(&mut self, address: u16, data: &mut u8) -> (bool, bool) {
         if address >= 0x0000u16 && address <= 0x1FFFu16 {
             let bank = address >> 12;
             // left or right bank ? we don't care actually!
             *data = self.chr_rom[0][address as usize];
-            return true;
+            return (true, false);
         }
-        return false;
+        return (false, false);
     }
 
     fn ppu_write(&mut self, address: u16, data: u8) -> bool {

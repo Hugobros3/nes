@@ -55,7 +55,7 @@ impl PatternsDebugWindow {
                 let fine_x = 7 - (x as u8 & 7);
 
                 let indexed_color: u8 = ((msb >> fine_x) & 0x1) << 1 | (lsb >> fine_x) & 0x01;
-                let palette_rgb = get_colour_from_palette_ram(&mut bus.ppu.borrow(), bus, 0, indexed_color);
+                let palette_rgb = get_colour_from_palette_ram(&mut bus.ppu.borrow_mut(), bus, 0, indexed_color);
                 self.buffer[(y as usize * width + x as usize)] = pack(palette_rgb.0, palette_rgb.1, palette_rgb.2);
                 //TODO use real palettes
                 /*let color = match (indexed_color) {
